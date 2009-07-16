@@ -4821,8 +4821,10 @@ int cssValueKeywordID(const CSSParserString& string)
         }
     }
 
+    {
     const css_value* hashTableEntry = findValue(buffer, length);
     return hashTableEntry ? hashTableEntry->id : 0;
+    }
 }
 
 #define YY_DECL int CSSParser::lex()
