@@ -75,17 +75,22 @@ void* RenderArena::allocate(size_t size)
 #ifndef NDEBUG
     // Use standard malloc so that memory debugging tools work.
     ASSERT(this);
-    void* block = ::malloc(sizeof(RenderArenaDebugHeader) + size);
+    char *p;
+    int sz;
+    sz = (sizeof(RenderArenaDebugHeader)+127) & (~127);
+    void *block = ::malloc(size + sz);
     RenderArenaDebugHeader* header = static_cast<RenderArenaDebugHeader*>(block);
     header->arena = this;
     header->size = size;
     header->signature = signature;
-    return header + 1;
+    p = block;
+    p += sz;
+    return p;
 #else
     void* result = 0;
 
     // Ensure we have correct alignment for pointers.  Important for Tru64
-    size = ROUNDUP(size, sizeof(void*));
+    size = ROUNDUP(size, sizeof(double));
 
     // Check recyclers first
     if (size < gMaxRecycledSize) {
@@ -111,8 +116,10 @@ void* RenderArena::allocate(size_t size)
 void RenderArena::free(size_t size, void* ptr)
 {
 #ifndef NDEBUG
+    int sz;
+    sz = (sizeof(RenderArenaDebugHeader)+127) & (~127);
     // Use standard free so that memory debugging tools work.
-    RenderArenaDebugHeader* header = static_cast<RenderArenaDebugHeader*>(ptr) - 1;
+    RenderArenaDebugHeader* header = static_cast<RenderArenaDebugHeader*>(ptr - sz);
     ASSERT(header->signature == signature);
     ASSERT_UNUSED(size, header->size == size);
     ASSERT(header->arena == this);
@@ -120,7 +127,7 @@ void RenderArena::free(size_t size, void* ptr)
     ::free(header);
 #else
     // Ensure we have correct alignment for pointers.  Important for Tru64
-    size = ROUNDUP(size, sizeof(void*));
+    size = ROUNDUP(size, sizeof(double));
 
     // See if it's a size that we recycle
     if (size < gMaxRecycledSize) {

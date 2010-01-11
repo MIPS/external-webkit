@@ -98,6 +98,10 @@ struct UCharBuffer {
     unsigned length;
 };
 
+struct unaligned_struct {
+    uint32_t i;
+} __attribute__((packed));
+
 static inline bool equal(StringImpl* string, const UChar* characters, unsigned length)
 {
     if (string->length() != length)
@@ -115,12 +119,12 @@ static inline bool equal(StringImpl* string, const UChar* characters, unsigned l
 #else
     /* Do it 4-bytes-at-a-time on architectures where it's safe */
 
-    const uint32_t* stringCharacters = reinterpret_cast<const uint32_t*>(string->characters());
-    const uint32_t* bufferCharacters = reinterpret_cast<const uint32_t*>(characters);
+    const struct unaligned_struct * stringCharacters = reinterpret_cast<const struct unaligned_struct*>(string->characters());
+    const struct unaligned_struct * bufferCharacters = reinterpret_cast<const struct unaligned_struct*>(characters);
 
     unsigned halfLength = length >> 1;
-    for (unsigned i = 0; i != halfLength; ++i) {
-        if (*stringCharacters++ != *bufferCharacters++)
+    for (unsigned i = 0; i != halfLength; ++i, stringCharacters++, bufferCharacters++) {
+        if (stringCharacters->i != bufferCharacters->i)
             return false;
     }
 
