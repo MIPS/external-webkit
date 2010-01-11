@@ -237,6 +237,12 @@ LOCAL_CFLAGS += -Darm
 LOCAL_CFLAGS += -Wno-psabi
 endif
 
+ifeq ($(TARGET_ARCH),mips)
+LOCAL_CFLAGS += -Dmips
+# remove this warning: "note: the mangling of 'va_list' has changed in GCC 4.4"
+LOCAL_CFLAGS += -Wno-psabi
+endif
+
 # need a flag to tell the C side when we're on devices with large memory
 # budgets (i.e. larger than the low-end devices that initially shipped)
 ifeq ($(ARCH_ARM_HAVE_VFP),true)
