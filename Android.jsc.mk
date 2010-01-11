@@ -68,6 +68,10 @@ ifeq ($(TARGET_ARCH),arm)
 LOCAL_CFLAGS += -Darm
 endif
 
+ifeq ($(TARGET_ARCH),mips)
+LOCAL_CFLAGS += -Dmips
+endif
+
 ifeq ($(ENABLE_SVG),true)
 LOCAL_CFLAGS += -DENABLE_SVG=1
 endif
