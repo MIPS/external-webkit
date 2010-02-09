@@ -178,6 +178,30 @@ namespace JSC {
         // When JIT code makes a call, it pushes its return address just below the rest of the stack.
         ReturnAddressPtr* returnAddressSlot() { return reinterpret_cast<ReturnAddressPtr*>(this) - 1; }
     };
+#elif PLATFORM(MIPS)
+    struct JITStackFrame {
+        void* reserved; // Unused
+        JITStubArg args[6];
+
+        void* preservedGP; // store GP when using PIC code
+        void* preservedS0;
+        void* preservedS1;
+        void* preservedS2;
+        void* preservedReturnAddress;
+
+        ReturnAddressPtr thunkReturnAddress;
+
+        // These arguments passed in a1..a3 (a0 contained the entry code pointed, which is not preserved)
+        RegisterFile* registerFile;
+        CallFrame* callFrame;
+        JSValue* exception;
+
+        // These arguments passed on the stack.
+        Profiler** enabledProfilerReference;
+        JSGlobalData* globalData;
+
+        ReturnAddressPtr* returnAddressSlot() { return &thunkReturnAddress; }
+    };
 #else
 #error "JITStackFrame not defined for this platform."
 #endif

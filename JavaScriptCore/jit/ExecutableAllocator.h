@@ -38,6 +38,10 @@
 #include <sys/mman.h>
 #endif
 
+#if PLATFORM(MIPS) && PLATFORM(LINUX)
+#include <sys/cachectl.h>
+#endif
+
 #define JIT_ALLOCATOR_PAGE_SIZE (ExecutableAllocator::pageSize)
 #define JIT_ALLOCATOR_LARGE_ALLOC_SIZE (ExecutableAllocator::pageSize * 4)
 
@@ -175,6 +179,33 @@ public:
 #if PLATFORM(X86) || PLATFORM(X86_64)
     static void cacheFlush(void*, size_t)
     {
+    }
+#elif PLATFORM(MIPS)
+    static void cacheFlush(void* code, size_t size)
+    {
+#if COMPILER(GCC) && (GCC_VERSION >= 40300)
+#if __mips_isa_rev == 2 && (GCC_VERSION < 40403)
+        int line_size;
+        asm ("rdhwr %0, $1" : "=r" (line_size));
+        //
+        // Modify "start" and "end" to avoid GCC 4.3.0-4.4.2 bug in
+        // mips_expand_synci_loop that may execute synci one more time.
+        // "start" points to the fisrt byte of the cache line.
+        // "end" points to the last byte of the line before the last cache line
+
+        // Because size is always a multiple of 4, this is safe to set
+        // "end" to the last byte.
+        //
+        intptr_t start = reinterpret_cast<intptr_t>(code) & (-line_size);
+        intptr_t end = ((reinterpret_cast<intptr_t>(code) + size - 1) & (-line_size)) - 1;
+        __clear_cache(reinterpret_cast<char*>(start), reinterpret_cast<char*>(end));
+#else
+        intptr_t end = reinterpret_cast<intptr_t>(code) + size;
+        __clear_cache(reinterpret_cast<char*>(code), reinterpret_cast<char*>(end));
+#endif
+#else
+        _flush_cache(reinterpret_cast<char*>(code), size, BCACHE);
+#endif
     }
 #elif PLATFORM_ARM_ARCH(7) && PLATFORM(IPHONE)
     static void cacheFlush(void* code, size_t size)

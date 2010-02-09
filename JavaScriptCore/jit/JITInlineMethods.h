@@ -136,6 +136,23 @@ ALWAYS_INLINE void JIT::restoreReturnAddressBeforeReturn(Address address)
     loadPtr(address, linkRegister);
 }
 
+#elif PLATFORM(MIPS)
+
+ALWAYS_INLINE void JIT::preserveReturnAddressAfterCall(RegisterID reg)
+{
+    move(returnAddressRegister, reg);
+}
+
+ALWAYS_INLINE void JIT::restoreReturnAddressBeforeReturn(RegisterID reg)
+{
+    move(reg, returnAddressRegister);
+}
+
+ALWAYS_INLINE void JIT::restoreReturnAddressBeforeReturn(Address address)
+{
+    loadPtr(address, returnAddressRegister);
+}
+
 #endif
 
 #if USE(JIT_STUB_ARGUMENT_VA_LIST)

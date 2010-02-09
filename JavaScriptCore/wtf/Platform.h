@@ -239,6 +239,15 @@
 #define WTF_PLATFORM_BIG_ENDIAN 1
 #endif
 
+/* PLATFORM(MIPS) */
+/* Note: Only O32 ABI is tested, so we enable it for O32 ABI for now.  */
+#if   (defined(mips) || defined(__mips__)) && defined(_ABIO32)
+#define WTF_PLATFORM_MIPS 1
+#if defined(__MIPSEB__)
+#define WTF_PLATFORM_BIG_ENDIAN 1
+#endif
+#endif /* MIPS */
+
 /* PLATFORM(ARM) */
 #if   defined(arm) \
    || defined(__arm__)
@@ -612,6 +621,8 @@
 #define WTF_USE_JSVALUE64 1
 #elif PLATFORM(PPC64) || PLATFORM(QT) /* All Qt layout tests crash in JSVALUE32_64 mode. */
 #define WTF_USE_JSVALUE32 1
+#elif PLATFORM(MIPS)
+#define WTF_USE_JSVALUE32 1
 #else
 #define WTF_USE_JSVALUE32_64 1
 #endif
@@ -651,6 +662,11 @@
     #define WTF_USE_JIT_STUB_ARGUMENT_VA_LIST 1
 #endif
 #endif /* PLATFORM(QT) && PLATFORM(X86) */
+
+#if PLATFORM(MIPS) && PLATFORM(QT) && PLATFORM(LINUX)
+    #define ENABLE_JIT 1
+    #define WTF_USE_JIT_STUB_ARGUMENT_VA_LIST 0
+#endif /* PLATFORM(MIPS) && PLATFORM(QT) && PLATFORM(LINUX) */
 
 #endif /* !defined(ENABLE_JIT) */
 
@@ -707,6 +723,11 @@
 #define ENABLE_YARR 1
 #define ENABLE_YARR_JIT 1
 #endif
+#endif
+
+#if PLATFORM(MIPS) && PLATFORM(QT) && PLATFORM(LINUX)
+#define ENABLE_YARR 1
+#define ENABLE_YARR_JIT 1
 #endif
 
 #endif /* !defined(ENABLE_YARR_JIT) */
