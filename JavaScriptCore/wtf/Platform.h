@@ -663,10 +663,10 @@
 #endif
 #endif /* PLATFORM(QT) && PLATFORM(X86) */
 
-#if PLATFORM(MIPS) && PLATFORM(QT) && PLATFORM(LINUX)
+#if PLATFORM(MIPS)
     #define ENABLE_JIT 1
     #define WTF_USE_JIT_STUB_ARGUMENT_VA_LIST 0
-#endif /* PLATFORM(MIPS) && PLATFORM(QT) && PLATFORM(LINUX) */
+#endif /* PLATFORM(MIPS) */
 
 #endif /* !defined(ENABLE_JIT) */
 
@@ -725,7 +725,7 @@
 #endif
 #endif
 
-#if PLATFORM(MIPS) && PLATFORM(QT) && PLATFORM(LINUX)
+#if PLATFORM(MIPS)
 #define ENABLE_YARR 1
 #define ENABLE_YARR_JIT 1
 #endif

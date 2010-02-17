@@ -194,7 +194,20 @@ LOCAL_SRC_FILES := \
 	wtf/unicode/CollatorDefault.cpp \
 	wtf/unicode/UTF8.cpp \
 	\
-	wtf/unicode/icu/CollatorICU.cpp
+	wtf/unicode/icu/CollatorICU.cpp \
+	\
+	yarr/RegexCompiler.cpp \
+	yarr/RegexInterpreter.cpp \
+	yarr/RegexJIT.cpp \
+	\
+	jit/ExecutableAllocator.cpp \
+	jit/ExecutableAllocatorPosix.cpp \
+	jit/JIT.cpp \
+	jit/JITCall.cpp \
+	jit/JITArithmetic.cpp \
+	jit/JITOpcodes.cpp \
+	jit/JITPropertyAccess.cpp \
+	jit/JITStubs.cpp
 
 # Rule to build grammar.y with our custom bison.
 GEN := $(intermediates)/parser/Grammar.cpp
