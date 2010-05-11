@@ -139,6 +139,8 @@ FILE* gRenderTreeFile = 0;
 
 namespace android {
 
+bool WebViewCore::s_isPaused = false;
+
 // ----------------------------------------------------------------------------
 
 #define GET_NATIVE_VIEW(env, obj) ((WebViewCore*)env->GetIntField(obj, gWebViewCoreFields.m_nativeClass))
@@ -191,6 +193,7 @@ struct WebViewCore::JavaGlue {
     jmethodID   m_startFullScreenPluginActivity;
     jmethodID   m_createSurface;
     jmethodID   m_destroySurface;
+    jmethodID   m_showRect;
     AutoJObject object(JNIEnv* env) {
         return getRealObject(env, m_obj);
     }
@@ -267,6 +270,7 @@ WebViewCore::WebViewCore(JNIEnv* env, jobject javaWebViewCore, WebCore::Frame* m
     m_javaGlue->m_startFullScreenPluginActivity = GetJMethod(env, clazz, "startFullScreenPluginActivity", "(Ljava/lang/String;Ljava/lang/String;I)V");
     m_javaGlue->m_createSurface = GetJMethod(env, clazz, "createSurface", "(Ljava/lang/String;Ljava/lang/String;IIIII)Landroid/webkit/ViewManager$ChildView;");
     m_javaGlue->m_destroySurface = GetJMethod(env, clazz, "destroySurface", "(Landroid/webkit/ViewManager$ChildView;)V");
+    m_javaGlue->m_showRect = GetJMethod(env, clazz, "showRect", "(IIIIIIFFFF)V");
 
     env->SetIntField(javaWebViewCore, gWebViewCoreFields.m_nativeClass, (jint)this);
 
@@ -772,7 +776,12 @@ void WebViewCore::scrollTo(int x, int y, bool animate)
 //    LOGD("WebViewCore::scrollTo(%d %d)\n", x, y);
 
     JNIEnv* env = JSC::Bindings::getJNIEnv();
-    env->CallVoidMethod(m_javaGlue->object(env).get(), animate ? m_javaGlue->m_spawnScrollTo : m_javaGlue->m_scrollTo, x, y);
+    AutoJObject obj = m_javaGlue->object(env);
+    // if it is called during DESTROY is handled, the real object of WebViewCore
+    // can be gone. Check before using it.
+    if (!obj.get())
+        return;
+    env->CallVoidMethod(obj.get(), animate ? m_javaGlue->m_spawnScrollTo : m_javaGlue->m_scrollTo, x, y);
     checkException(env);
 }
 
@@ -780,7 +789,12 @@ void WebViewCore::sendNotifyProgressFinished()
 {
     LOG_ASSERT(m_javaGlue->m_obj, "A Java widget was not associated with this view bridge!");
     JNIEnv* env = JSC::Bindings::getJNIEnv();
-    env->CallVoidMethod(m_javaGlue->object(env).get(), m_javaGlue->m_sendNotifyProgressFinished);
+    AutoJObject obj = m_javaGlue->object(env);
+    // if it is called during DESTROY is handled, the real object of WebViewCore
+    // can be gone. Check before using it.
+    if (!obj.get())
+        return;
+    env->CallVoidMethod(obj.get(), m_javaGlue->m_sendNotifyProgressFinished);
     checkException(env);
 }
 
@@ -788,7 +802,12 @@ void WebViewCore::viewInvalidate(const WebCore::IntRect& rect)
 {
     LOG_ASSERT(m_javaGlue->m_obj, "A Java widget was not associated with this view bridge!");
     JNIEnv* env = JSC::Bindings::getJNIEnv();
-    env->CallVoidMethod(m_javaGlue->object(env).get(),
+    AutoJObject obj = m_javaGlue->object(env);
+    // if it is called during DESTROY is handled, the real object of WebViewCore
+    // can be gone. Check before using it.
+    if (!obj.get())
+        return;
+    env->CallVoidMethod(obj.get(),
                         m_javaGlue->m_sendViewInvalidate,
                         rect.x(), rect.y(), rect.right(), rect.bottom());
     checkException(env);
@@ -799,7 +818,12 @@ void WebViewCore::scrollBy(int dx, int dy, bool animate)
     if (!(dx | dy))
         return;
     JNIEnv* env = JSC::Bindings::getJNIEnv();
-    env->CallVoidMethod(m_javaGlue->object(env).get(), m_javaGlue->m_scrollBy,
+    AutoJObject obj = m_javaGlue->object(env);
+    // if it is called during DESTROY is handled, the real object of WebViewCore
+    // can be gone. Check before using it.
+    if (!obj.get())
+        return;
+    env->CallVoidMethod(obj.get(), m_javaGlue->m_scrollBy,
         dx, dy, animate);
     checkException(env);
 }
@@ -807,7 +831,12 @@ void WebViewCore::scrollBy(int dx, int dy, bool animate)
 void WebViewCore::contentDraw()
 {
     JNIEnv* env = JSC::Bindings::getJNIEnv();
-    env->CallVoidMethod(m_javaGlue->object(env).get(), m_javaGlue->m_contentDraw);
+    AutoJObject obj = m_javaGlue->object(env);
+    // if it is called during DESTROY is handled, the real object of WebViewCore
+    // can be gone. Check before using it.
+    if (!obj.get())
+        return;
+    env->CallVoidMethod(obj.get(), m_javaGlue->m_contentDraw);
     checkException(env);
 }
 
@@ -856,14 +885,18 @@ void WebViewCore::didFirstLayout()
     WebCore::FrameLoadType loadType = loader->loadType();
 
     JNIEnv* env = JSC::Bindings::getJNIEnv();
-    env->CallVoidMethod(m_javaGlue->object(env).get(), m_javaGlue->m_didFirstLayout,
+    AutoJObject obj = m_javaGlue->object(env);
+    // if it is called during DESTROY is handled, the real object of WebViewCore
+    // can be gone. Check before using it.
+    if (!obj.get())
+        return;
+    env->CallVoidMethod(obj.get(), m_javaGlue->m_didFirstLayout,
             loadType == WebCore::FrameLoadTypeStandard
             // When redirect with locked history, we would like to reset the
             // scale factor. This is important for www.yahoo.com as it is
             // redirected to www.yahoo.com/?rs=1 on load.
             || loadType == WebCore::FrameLoadTypeRedirectWithLockedBackForwardList);
     checkException(env);
-
     DBG_NAV_LOG("call updateFrameCache");
     m_check_domtree_version = false;
     updateFrameCache();
@@ -876,7 +909,12 @@ void WebViewCore::updateViewport()
     LOG_ASSERT(m_javaGlue->m_obj, "A Java widget was not associated with this view bridge!");
 
     JNIEnv* env = JSC::Bindings::getJNIEnv();
-    env->CallVoidMethod(m_javaGlue->object(env).get(), m_javaGlue->m_updateViewport);
+    AutoJObject obj = m_javaGlue->object(env);
+    // if it is called during DESTROY is handled, the real object of WebViewCore
+    // can be gone. Check before using it.
+    if (!obj.get())
+        return;
+    env->CallVoidMethod(obj.get(), m_javaGlue->m_updateViewport);
     checkException(env);
 }
 
@@ -886,7 +924,12 @@ void WebViewCore::restoreScale(int scale)
     LOG_ASSERT(m_javaGlue->m_obj, "A Java widget was not associated with this view bridge!");
 
     JNIEnv* env = JSC::Bindings::getJNIEnv();
-    env->CallVoidMethod(m_javaGlue->object(env).get(), m_javaGlue->m_restoreScale, scale);
+    AutoJObject obj = m_javaGlue->object(env);
+    // if it is called during DESTROY is handled, the real object of WebViewCore
+    // can be gone. Check before using it.
+    if (!obj.get())
+        return;
+    env->CallVoidMethod(obj.get(), m_javaGlue->m_restoreScale, scale);
     checkException(env);
 }
 
@@ -896,7 +939,12 @@ void WebViewCore::restoreScreenWidthScale(int scale)
     LOG_ASSERT(m_javaGlue->m_obj, "A Java widget was not associated with this view bridge!");
 
     JNIEnv* env = JSC::Bindings::getJNIEnv();
-    env->CallVoidMethod(m_javaGlue->object(env).get(), m_javaGlue->m_restoreScreenWidthScale, scale);
+    AutoJObject obj = m_javaGlue->object(env);
+    // if it is called during DESTROY is handled, the real object of WebViewCore
+    // can be gone. Check before using it.
+    if (!obj.get())
+        return;
+    env->CallVoidMethod(obj.get(), m_javaGlue->m_restoreScreenWidthScale, scale);
     checkException(env);
 }
 
@@ -910,10 +958,10 @@ void WebViewCore::needTouchEvents(bool need)
     AutoJObject obj = m_javaGlue->object(env);
     // if it is called during DESTROY is handled, the real object of WebViewCore
     // can be gone. Check before using it.
-    if (env && obj.get()) {
-        env->CallVoidMethod(obj.get(), m_javaGlue->m_needTouchEvents, need);
-        checkException(env);
-    }
+    if (!obj.get())
+        return;
+    env->CallVoidMethod(obj.get(), m_javaGlue->m_needTouchEvents, need);
+    checkException(env);
 #endif
 }
 
@@ -923,7 +971,12 @@ void WebViewCore::requestKeyboard(bool showKeyboard)
     LOG_ASSERT(m_javaGlue->m_obj, "A Java widget was not associated with this view bridge!");
 
     JNIEnv* env = JSC::Bindings::getJNIEnv();
-    env->CallVoidMethod(m_javaGlue->object(env).get(), m_javaGlue->m_requestKeyboard, showKeyboard);
+    AutoJObject obj = m_javaGlue->object(env);
+    // if it is called during DESTROY is handled, the real object of WebViewCore
+    // can be gone. Check before using it.
+    if (!obj.get())
+        return;
+    env->CallVoidMethod(obj.get(), m_javaGlue->m_requestKeyboard, showKeyboard);
     checkException(env);
 }
 
@@ -994,13 +1047,15 @@ void WebViewCore::setGlobalBounds(int x, int y, int h, int v)
 
 void WebViewCore::setSizeScreenWidthAndScale(int width, int height,
     int screenWidth, float scale, int realScreenWidth, int screenHeight,
-    bool ignoreHeight)
+    int anchorX, int anchorY, bool ignoreHeight)
 {
     WebCoreViewBridge* window = m_mainFrame->view()->platformWidget();
     int ow = window->width();
     int oh = window->height();
     window->setSize(width, height);
     int osw = m_screenWidth;
+    int orsw = m_screenWidth * m_screenWidthScale / m_scale;
+    int osh = m_screenHeight;
     DBG_NAV_LOGD("old:(w=%d,h=%d,sw=%d,scale=%g) new:(w=%d,h=%d,sw=%d,scale=%g)",
         ow, oh, osw, m_scale, width, height, screenWidth, scale);
     m_screenWidth = screenWidth;
@@ -1019,27 +1074,44 @@ void WebViewCore::setSizeScreenWidthAndScale(int width, int height,
         DBG_NAV_LOGD("renderer=%p view=(w=%d,h=%d)", r,
             realScreenWidth, screenHeight);
         if (r) {
-            // get current screen center position
-            WebCore::IntPoint screenCenter = WebCore::IntPoint(
-                m_scrollOffsetX + (realScreenWidth >> 1),
-                m_scrollOffsetY + (screenHeight >> 1));
-            WebCore::HitTestResult hitTestResult = m_mainFrame->eventHandler()->
-                hitTestResultAtPoint(screenCenter, false);
-            WebCore::Node* node = hitTestResult.innerNode();
+            WebCore::Node* node = 0;
             WebCore::IntRect bounds;
-            WebCore::IntPoint offset;
-            if (node) {
-                bounds = node->getRect();
-                DBG_NAV_LOGD("ob:(x=%d,y=%d,w=%d,h=%d)",
-                    bounds.x(), bounds.y(), bounds.width(), bounds.height());
-                offset = WebCore::IntPoint(screenCenter.x() - bounds.x(),
-                    screenCenter.y() - bounds.y());
-                if (offset.x() < 0 || offset.x() > realScreenWidth ||
-                    offset.y() < 0 || offset.y() > screenHeight)
-                {
-                    DBG_NAV_LOGD("offset out of bounds:(x=%d,y=%d)",
-                        offset.x(), offset.y());
-                    node = 0;
+            if (osw) {
+                WebCore::IntPoint anchorPoint;
+                if ((anchorX | anchorY) == 0)
+                    // get current screen center position
+                    anchorPoint = WebCore::IntPoint(m_scrollOffsetX
+                            + (realScreenWidth >> 1), m_scrollOffsetY
+                            + (screenHeight >> 1));
+                else
+                    anchorPoint = WebCore::IntPoint(anchorX, anchorY);
+                WebCore::HitTestResult hitTestResult = m_mainFrame->eventHandler()->
+                    hitTestResultAtPoint(anchorPoint, false);
+                node = hitTestResult.innerNode();
+                if (node) {
+                    bounds = node->getRect();
+                    DBG_NAV_LOGD("ob:(x=%d,y=%d,w=%d,h=%d)",
+                        bounds.x(), bounds.y(), bounds.width(), bounds.height());
+                    // sites like nytimes.com insert a non-standard tag <nyt_text>
+                    // in the html. If it is the HitTestResult, it may have zero
+                    // width and height. In this case, use its parent node.
+                    if (bounds.width() == 0) {
+                        node = node->parent();
+                        if (node)
+                            bounds = node->getRect();
+                    }
+                    if ((anchorX | anchorY) == 0) {
+                        WebCore::IntPoint offset = WebCore::IntPoint(
+                                anchorPoint.x() - bounds.x(), anchorPoint.y()
+                                        - bounds.y());
+                        if (offset.x() < 0 || offset.x() > realScreenWidth ||
+                            offset.y() < 0 || offset.y() > screenHeight)
+                        {
+                            DBG_NAV_LOGD("offset out of bounds:(x=%d,y=%d)",
+                                offset.x(), offset.y());
+                            node = 0;
+                        }
+                    }
                 }
             }
             r->setNeedsLayoutAndPrefWidthsRecalc();
@@ -1051,8 +1123,26 @@ void WebViewCore::setSizeScreenWidthAndScale(int width, int height,
             DBG_NAV_LOGD("nb:(x=%d,y=%d,w=%d,"
                 "h=%d,ns=%d)", newBounds.x(), newBounds.y(),
                 newBounds.width(), newBounds.height());
-            scrollBy(newBounds.x() - bounds.x(), newBounds.y() - bounds.y(),
-                false);
+            if ((anchorX | anchorY) == 0)
+                scrollBy(newBounds.x() - bounds.x(),
+                        newBounds.y() - bounds.y(), false);
+            else if ((orsw && osh && bounds.width() && bounds.height())
+                    && (bounds != newBounds)) {
+                WebCore::FrameView* view = m_mainFrame->view();
+                // force left align if width is not changed while height changed.
+                // the anchorPoint is probably at some white space in the node
+                // which is affected by text wrap around the screen width.
+                bool leftAlign = (osw != m_screenWidth)
+                        && (bounds.width() == newBounds.width())
+                        && (bounds.height() != newBounds.height());
+                showRect(newBounds.x(), newBounds.y(), newBounds.width(),
+                        newBounds.height(), view->contentsWidth(),
+                        view->contentsHeight(),
+                        leftAlign ? 0.0 : (float) (anchorX - bounds.x()) / bounds.width(),
+                        leftAlign ? 0.0 : (float) (anchorX - m_scrollOffsetX) / orsw,
+                        (float) (anchorY - bounds.y()) / bounds.height(),
+                        (float) (anchorY - m_scrollOffsetY) / osh);
+            }
         }
     }
 
@@ -1815,6 +1905,11 @@ void WebViewCore::listBoxRequest(WebCoreReply* reply, const uint16_t** labels, s
 
     // Create an array of java Strings for the drop down.
     JNIEnv* env = JSC::Bindings::getJNIEnv();
+    AutoJObject obj = m_javaGlue->object(env);
+    // if it is called during DESTROY is handled, the real object of WebViewCore
+    // can be gone. Check before using it.
+    if (!obj.get())
+        return;
     jobjectArray labelArray = makeLabelArray(env, labels, count);
 
     // Create an array determining whether each item is enabled.
@@ -1839,11 +1934,11 @@ void WebViewCore::listBoxRequest(WebCoreReply* reply, const uint16_t** labels, s
         }
         env->ReleaseIntArrayElements(selectedArray, selArray, 0);
 
-        env->CallVoidMethod(m_javaGlue->object(env).get(), m_javaGlue->m_requestListBox, labelArray, enabledArray, selectedArray);
+        env->CallVoidMethod(obj.get(), m_javaGlue->m_requestListBox, labelArray, enabledArray, selectedArray);
         env->DeleteLocalRef(selectedArray);
     } else {
         // Pass up the single selection.
-        env->CallVoidMethod(m_javaGlue->object(env).get(), m_javaGlue->m_requestSingleListBox, labelArray, enabledArray, selectedCountOrSelection);
+        env->CallVoidMethod(obj.get(), m_javaGlue->m_requestSingleListBox, labelArray, enabledArray, selectedCountOrSelection);
     }
 
     env->DeleteLocalRef(labelArray);
@@ -2051,9 +2146,14 @@ void WebViewCore::popupReply(const int* array, int count)
 
 void WebViewCore::addMessageToConsole(const WebCore::String& message, unsigned int lineNumber, const WebCore::String& sourceID) {
     JNIEnv* env = JSC::Bindings::getJNIEnv();
+    AutoJObject obj = m_javaGlue->object(env);
+    // if it is called during DESTROY is handled, the real object of WebViewCore
+    // can be gone. Check before using it.
+    if (!obj.get())
+        return;
     jstring jMessageStr = env->NewString((unsigned short *)message.characters(), message.length());
     jstring jSourceIDStr = env->NewString((unsigned short *)sourceID.characters(), sourceID.length());
-    env->CallVoidMethod(m_javaGlue->object(env).get(), m_javaGlue->m_addMessageToConsole, jMessageStr, lineNumber, jSourceIDStr);
+    env->CallVoidMethod(obj.get(), m_javaGlue->m_addMessageToConsole, jMessageStr, lineNumber, jSourceIDStr);
     env->DeleteLocalRef(jMessageStr);
     env->DeleteLocalRef(jSourceIDStr);
     checkException(env);
@@ -2062,9 +2162,14 @@ void WebViewCore::addMessageToConsole(const WebCore::String& message, unsigned i
 void WebViewCore::jsAlert(const WebCore::String& url, const WebCore::String& text)
 {
     JNIEnv* env = JSC::Bindings::getJNIEnv();
+    AutoJObject obj = m_javaGlue->object(env);
+    // if it is called during DESTROY is handled, the real object of WebViewCore
+    // can be gone. Check before using it.
+    if (!obj.get())
+        return;
     jstring jInputStr = env->NewString((unsigned short *)text.characters(), text.length());
     jstring jUrlStr = env->NewString((unsigned short *)url.characters(), url.length());
-    env->CallVoidMethod(m_javaGlue->object(env).get(), m_javaGlue->m_jsAlert, jUrlStr, jInputStr);
+    env->CallVoidMethod(obj.get(), m_javaGlue->m_jsAlert, jUrlStr, jInputStr);
     env->DeleteLocalRef(jInputStr);
     env->DeleteLocalRef(jUrlStr);
     checkException(env);
@@ -2074,9 +2179,14 @@ void WebViewCore::exceededDatabaseQuota(const WebCore::String& url, const WebCor
 {
 #if ENABLE(DATABASE)
     JNIEnv* env = JSC::Bindings::getJNIEnv();
+    AutoJObject obj = m_javaGlue->object(env);
+    // if it is called during DESTROY is handled, the real object of WebViewCore
+    // can be gone. Check before using it.
+    if (!obj.get())
+        return;
     jstring jDatabaseIdentifierStr = env->NewString((unsigned short *)databaseIdentifier.characters(), databaseIdentifier.length());
     jstring jUrlStr = env->NewString((unsigned short *)url.characters(), url.length());
-    env->CallVoidMethod(m_javaGlue->object(env).get(), m_javaGlue->m_exceededDatabaseQuota, jUrlStr, jDatabaseIdentifierStr, currentQuota, estimatedSize);
+    env->CallVoidMethod(obj.get(), m_javaGlue->m_exceededDatabaseQuota, jUrlStr, jDatabaseIdentifierStr, currentQuota, estimatedSize);
     env->DeleteLocalRef(jDatabaseIdentifierStr);
     env->DeleteLocalRef(jUrlStr);
     checkException(env);
@@ -2087,7 +2197,12 @@ void WebViewCore::reachedMaxAppCacheSize(const unsigned long long spaceNeeded)
 {
 #if ENABLE(OFFLINE_WEB_APPLICATIONS)
     JNIEnv* env = JSC::Bindings::getJNIEnv();
-    env->CallVoidMethod(m_javaGlue->object(env).get(), m_javaGlue->m_reachedMaxAppCacheSize, spaceNeeded);
+    AutoJObject obj = m_javaGlue->object(env);
+    // if it is called during DESTROY is handled, the real object of WebViewCore
+    // can be gone. Check before using it.
+    if (!obj.get())
+        return;
+    env->CallVoidMethod(obj.get(), m_javaGlue->m_reachedMaxAppCacheSize, spaceNeeded);
     checkException(env);
 #endif
 }
@@ -2096,15 +2211,25 @@ void WebViewCore::populateVisitedLinks(WebCore::PageGroup* group)
 {
     m_groupForVisitedLinks = group;
     JNIEnv* env = JSC::Bindings::getJNIEnv();
-    env->CallVoidMethod(m_javaGlue->object(env).get(), m_javaGlue->m_populateVisitedLinks);
+    AutoJObject obj = m_javaGlue->object(env);
+    // if it is called during DESTROY is handled, the real object of WebViewCore
+    // can be gone. Check before using it.
+    if (!obj.get())
+        return;
+    env->CallVoidMethod(obj.get(), m_javaGlue->m_populateVisitedLinks);
     checkException(env);
 }
 
 void WebViewCore::geolocationPermissionsShowPrompt(const WebCore::String& origin)
 {
     JNIEnv* env = JSC::Bindings::getJNIEnv();
+    AutoJObject obj = m_javaGlue->object(env);
+    // if it is called during DESTROY is handled, the real object of WebViewCore
+    // can be gone. Check before using it.
+    if (!obj.get())
+        return;
     jstring originString = env->NewString((unsigned short *)origin.characters(), origin.length());
-    env->CallVoidMethod(m_javaGlue->object(env).get(),
+    env->CallVoidMethod(obj.get(),
                         m_javaGlue->m_geolocationPermissionsShowPrompt,
                         originString);
     env->DeleteLocalRef(originString);
@@ -2114,7 +2239,12 @@ void WebViewCore::geolocationPermissionsShowPrompt(const WebCore::String& origin
 void WebViewCore::geolocationPermissionsHidePrompt()
 {
     JNIEnv* env = JSC::Bindings::getJNIEnv();
-    env->CallVoidMethod(m_javaGlue->object(env).get(),
+    AutoJObject obj = m_javaGlue->object(env);
+    // if it is called during DESTROY is handled, the real object of WebViewCore
+    // can be gone. Check before using it.
+    if (!obj.get())
+        return;
+    env->CallVoidMethod(obj.get(),
                         m_javaGlue->m_geolocationPermissionsHidePrompt);
     checkException(env);
 }
@@ -2122,9 +2252,14 @@ void WebViewCore::geolocationPermissionsHidePrompt()
 bool WebViewCore::jsConfirm(const WebCore::String& url, const WebCore::String& text)
 {
     JNIEnv* env = JSC::Bindings::getJNIEnv();
+    AutoJObject obj = m_javaGlue->object(env);
+    // if it is called during DESTROY is handled, the real object of WebViewCore
+    // can be gone. Check before using it.
+    if (!obj.get())
+        return false;
     jstring jInputStr = env->NewString((unsigned short *)text.characters(), text.length());
     jstring jUrlStr = env->NewString((unsigned short *)url.characters(), url.length());
-    jboolean result = env->CallBooleanMethod(m_javaGlue->object(env).get(), m_javaGlue->m_jsConfirm, jUrlStr, jInputStr);
+    jboolean result = env->CallBooleanMethod(obj.get(), m_javaGlue->m_jsConfirm, jUrlStr, jInputStr);
     env->DeleteLocalRef(jInputStr);
     env->DeleteLocalRef(jUrlStr);
     checkException(env);
@@ -2134,10 +2269,16 @@ bool WebViewCore::jsConfirm(const WebCore::String& url, const WebCore::String& t
 bool WebViewCore::jsPrompt(const WebCore::String& url, const WebCore::String& text, const WebCore::String& defaultValue, WebCore::String& result)
 {
     JNIEnv* env = JSC::Bindings::getJNIEnv();
+    AutoJObject obj = m_javaGlue->object(env);
+    // if it is called during DESTROY is handled, the real object of WebViewCore
+    // can be gone. Check before using it.
+    if (!obj.get())
+        return false;
+
     jstring jInputStr = env->NewString((unsigned short *)text.characters(), text.length());
     jstring jDefaultStr = env->NewString((unsigned short *)defaultValue.characters(), defaultValue.length());
     jstring jUrlStr = env->NewString((unsigned short *)url.characters(), url.length());
-    jstring returnVal = (jstring) env->CallObjectMethod(m_javaGlue->object(env).get(), m_javaGlue->m_jsPrompt, jUrlStr, jInputStr, jDefaultStr);
+    jstring returnVal = (jstring) env->CallObjectMethod(obj.get(), m_javaGlue->m_jsPrompt, jUrlStr, jInputStr, jDefaultStr);
     // If returnVal is null, it means that the user cancelled the dialog.
     if (!returnVal)
         return false;
@@ -2153,9 +2294,14 @@ bool WebViewCore::jsPrompt(const WebCore::String& url, const WebCore::String& te
 bool WebViewCore::jsUnload(const WebCore::String& url, const WebCore::String& message)
 {
     JNIEnv* env = JSC::Bindings::getJNIEnv();
+    AutoJObject obj = m_javaGlue->object(env);
+    // if it is called during DESTROY is handled, the real object of WebViewCore
+    // can be gone. Check before using it.
+    if (!obj.get())
+        return false;
     jstring jInputStr = env->NewString((unsigned short *)message.characters(), message.length());
     jstring jUrlStr = env->NewString((unsigned short *)url.characters(), url.length());
-    jboolean result = env->CallBooleanMethod(m_javaGlue->object(env).get(), m_javaGlue->m_jsUnload, jUrlStr, jInputStr);
+    jboolean result = env->CallBooleanMethod(obj.get(), m_javaGlue->m_jsUnload, jUrlStr, jInputStr);
     env->DeleteLocalRef(jInputStr);
     env->DeleteLocalRef(jUrlStr);
     checkException(env);
@@ -2165,7 +2311,12 @@ bool WebViewCore::jsUnload(const WebCore::String& url, const WebCore::String& me
 bool WebViewCore::jsInterrupt()
 {
     JNIEnv* env = JSC::Bindings::getJNIEnv();
-    jboolean result = env->CallBooleanMethod(m_javaGlue->object(env).get(), m_javaGlue->m_jsInterrupt);
+    AutoJObject obj = m_javaGlue->object(env);
+    // if it is called during DESTROY is handled, the real object of WebViewCore
+    // can be gone. Check before using it.
+    if (!obj.get())
+        return true;    // default to interrupt
+    jboolean result = env->CallBooleanMethod(obj.get(), m_javaGlue->m_jsInterrupt);
     checkException(env);
     return result;
 }
@@ -2180,7 +2331,12 @@ jobject
 WebViewCore::getWebViewJavaObject()
 {
     JNIEnv* env = JSC::Bindings::getJNIEnv();
-    return env->GetObjectField(m_javaGlue->object(env).get(), gWebViewCoreFields.m_webView);
+    AutoJObject obj = m_javaGlue->object(env);
+    // if it is called during DESTROY is handled, the real object of WebViewCore
+    // can be gone. Check before using it.
+    if (!obj.get())
+        return 0;
+    return env->GetObjectField(obj.get(), gWebViewCoreFields.m_webView);
 }
 
 void WebViewCore::updateTextSelection() {
@@ -2192,7 +2348,12 @@ void WebViewCore::updateTextSelection() {
         return;
     RenderTextControl* rtc = static_cast<RenderTextControl*>(renderer);
     JNIEnv* env = JSC::Bindings::getJNIEnv();
-    env->CallVoidMethod(m_javaGlue->object(env).get(),
+    AutoJObject obj = m_javaGlue->object(env);
+    // if it is called during DESTROY is handled, the real object of WebViewCore
+    // can be gone. Check before using it.
+    if (!obj.get())
+        return;
+    env->CallVoidMethod(obj.get(),
             m_javaGlue->m_updateTextSelection, reinterpret_cast<int>(focusNode),
             rtc->selectionStart(), rtc->selectionEnd(), m_textGeneration);
     checkException(env);
@@ -2204,15 +2365,21 @@ void WebViewCore::updateTextfield(WebCore::Node* ptr, bool changeToPassword,
     if (m_blockTextfieldUpdates)
         return;
     JNIEnv* env = JSC::Bindings::getJNIEnv();
+    AutoJObject obj = m_javaGlue->object(env);
+    // if it is called during DESTROY is handled, the real object of WebViewCore
+    // can be gone. Check before using it.
+    if (!obj.get())
+        return;
+
     if (changeToPassword) {
-        env->CallVoidMethod(m_javaGlue->object(env).get(), m_javaGlue->m_updateTextfield,
+        env->CallVoidMethod(obj.get(), m_javaGlue->m_updateTextfield,
                 (int) ptr, true, 0, m_textGeneration);
         checkException(env);
         return;
     }
     int length = text.length();
     jstring string = env->NewString((unsigned short *) text.characters(), length);
-    env->CallVoidMethod(m_javaGlue->object(env).get(), m_javaGlue->m_updateTextfield,
+    env->CallVoidMethod(obj.get(), m_javaGlue->m_updateTextfield,
             (int) ptr, false, string, m_textGeneration);
     env->DeleteLocalRef(string);
     checkException(env);
@@ -2221,8 +2388,13 @@ void WebViewCore::updateTextfield(WebCore::Node* ptr, bool changeToPassword,
 void WebViewCore::clearTextEntry()
 {
     JNIEnv* env = JSC::Bindings::getJNIEnv();
-    env->CallVoidMethod(m_javaGlue->object(env).get(),
-        m_javaGlue->m_clearTextEntry);
+    AutoJObject obj = m_javaGlue->object(env);
+    // if it is called during DESTROY is handled, the real object of WebViewCore
+    // can be gone. Check before using it.
+    if (!obj.get())
+        return;
+
+    env->CallVoidMethod(obj.get(), m_javaGlue->m_clearTextEntry);
 }
 
 void WebViewCore::setBackgroundColor(SkColor c)
@@ -2243,8 +2415,14 @@ void WebViewCore::startFullScreenPluginActivity(const char* libName,
     JNIEnv* env = JSC::Bindings::getJNIEnv();
 
     jstring libString = env->NewStringUTF(libName);
+    AutoJObject obj = m_javaGlue->object(env);
+    // if it is called during DESTROY is handled, the real object of WebViewCore
+    // can be gone. Check before using it.
+    if (!obj.get())
+        return;
+
     jstring classString = env->NewStringUTF(className);
-    env->CallVoidMethod(m_javaGlue->object(env).get(),
+    env->CallVoidMethod(obj.get(),
                         m_javaGlue->m_startFullScreenPluginActivity,
                         libString, classString, (int) npp);
     checkException(env);
@@ -2254,10 +2432,15 @@ jobject WebViewCore::createSurface(const char* libName, const char* className,
                                    NPP npp, int x, int y, int width, int height)
 {
     JNIEnv* env = JSC::Bindings::getJNIEnv();
+    AutoJObject obj = m_javaGlue->object(env);
+    // if it is called during DESTROY is handled, the real object of WebViewCore
+    // can be gone. Check before using it.
+    if (!obj.get())
+        return 0;
 
     jstring libString = env->NewStringUTF(libName);
     jstring classString = env->NewStringUTF(className);
-    jobject result = env->CallObjectMethod(m_javaGlue->object(env).get(),
+    jobject result = env->CallObjectMethod(obj.get(),
                                            m_javaGlue->m_createSurface, libString,
                                            classString,(int) npp, x, y, width, height);
     checkException(env);
@@ -2268,7 +2451,30 @@ jobject WebViewCore::createSurface(const char* libName, const char* className,
 void WebViewCore::destroySurface(jobject childView)
 {
     JNIEnv* env = JSC::Bindings::getJNIEnv();
-    env->CallVoidMethod(m_javaGlue->object(env).get(), m_javaGlue->m_destroySurface, childView);
+    AutoJObject obj = m_javaGlue->object(env);
+    // if it is called during DESTROY is handled, the real object of WebViewCore
+    // can be gone. Check before using it.
+    if (!obj.get())
+        return;
+
+    env->CallVoidMethod(obj.get(), m_javaGlue->m_destroySurface, childView);
+    checkException(env);
+}
+
+void WebViewCore::showRect(int left, int top, int width, int height,
+        int contentWidth, int contentHeight, float xPercentInDoc,
+        float xPercentInView, float yPercentInDoc, float yPercentInView)
+{
+    JNIEnv* env = JSC::Bindings::getJNIEnv();
+    AutoJObject obj = m_javaGlue->object(env);
+    // if it is called during DESTROY is handled, the real object of WebViewCore
+    // can be gone. Check before using it.
+    if (!obj.get())
+        return;
+
+    env->CallVoidMethod(obj.get(), m_javaGlue->m_showRect, left, top, width,
+            height, contentWidth, contentHeight, xPercentInDoc, xPercentInView,
+            yPercentInDoc, yPercentInView);
     checkException(env);
 }
 
@@ -2292,7 +2498,7 @@ static void UpdateFrameCacheIfLoading(JNIEnv *env, jobject obj)
 
 static void SetSize(JNIEnv *env, jobject obj, jint width, jint height,
         jint screenWidth, jfloat scale, jint realScreenWidth, jint screenHeight,
-        jboolean ignoreHeight)
+        jint anchorX, jint anchorY, jboolean ignoreHeight)
 {
 #ifdef ANDROID_INSTRUMENT
     TimeCounterAuto counter(TimeCounter::WebViewCoreTimeCounter);
@@ -2301,7 +2507,7 @@ static void SetSize(JNIEnv *env, jobject obj, jint width, jint height,
     LOGV("webviewcore::nativeSetSize(%u %u)\n viewImpl: %p", (unsigned)width, (unsigned)height, viewImpl);
     LOG_ASSERT(viewImpl, "viewImpl not set in nativeSetSize");
     viewImpl->setSizeScreenWidthAndScale(width, height, screenWidth, scale,
-        realScreenWidth, screenHeight, ignoreHeight);
+        realScreenWidth, screenHeight, anchorX, anchorY, ignoreHeight);
 }
 
 static void SetScrollOffset(JNIEnv *env, jobject obj, jint gen, jint x, jint y)
@@ -2787,6 +2993,8 @@ static void Pause(JNIEnv* env, jobject obj)
     SkANP::InitEvent(&event, kLifecycle_ANPEventType);
     event.data.lifecycle.action = kPause_ANPLifecycleAction;
     GET_NATIVE_VIEW(env, obj)->sendPluginEvent(event);
+
+    WebViewCore::setIsPaused(true);
 }
 
 static void Resume(JNIEnv* env, jobject obj)
@@ -2802,6 +3010,8 @@ static void Resume(JNIEnv* env, jobject obj)
     SkANP::InitEvent(&event, kLifecycle_ANPEventType);
     event.data.lifecycle.action = kResume_ANPLifecycleAction;
     GET_NATIVE_VIEW(env, obj)->sendPluginEvent(event);
+
+    WebViewCore::setIsPaused(false);
 }
 
 static void FreeMemory(JNIEnv* env, jobject obj)
@@ -2853,7 +3063,7 @@ static JNINativeMethod gJavaWebViewCoreMethods[] = {
         (void*) SendListBoxChoices },
     { "nativeSendListBoxChoice", "(I)V",
         (void*) SendListBoxChoice },
-    { "nativeSetSize", "(IIIFIIZ)V",
+    { "nativeSetSize", "(IIIFIIIIZ)V",
         (void*) SetSize },
     { "nativeSetScrollOffset", "(III)V",
         (void*) SetScrollOffset },
