@@ -141,7 +141,7 @@ void JIT::privateCompileCTIMachineTrampolines(RefPtr<ExecutablePool>* executable
     loadPtr(Address(regT2, OBJECT_OFFSETOF(FunctionExecutable, m_jitCode)), regT0);
     jump(regT0);
 
-#if CPU(X86) || CPU(ARM_TRADITIONAL)
+#if CPU(X86) || CPU(ARM_TRADITIONAL) || CPU(MIPS)
     Label nativeCallThunk = align();
     preserveReturnAddressAfterCall(regT0);
     emitPutToCallFrameHeader(regT0, RegisterFile::ReturnPC); // Push return address
@@ -310,6 +310,72 @@ void JIT::privateCompileCTIMachineTrampolines(RefPtr<ExecutablePool>* executable
     load32(Address(stackPointerRegister, 20), regT1);
 
     addPtr(Imm32(sizeof(ArgList) + 16 + 8), stackPointerRegister);
+#elif CPU(MIPS)
+   emitGetFromCallFrameHeader32(RegisterFile::ArgumentCount, regT0);
+
+   // Allocate stack space for our arglist
+   COMPILE_ASSERT(!(sizeof(ArgList) & 0x7) && sizeof(JSValue) == 8 && sizeof(Register) == 8, ArgList_should_by_8byte_aligned);
+   subPtr(Imm32(sizeof(ArgList) + 40), stackPointerRegister);
+
+   // Set up arguments
+   subPtr(Imm32(1), regT0); // Don't include 'this' in argcount
+
+   // Push argcount to 40 + offset($sp)
+  storePtr(regT0, Address(stackPointerRegister, 40 + OBJECT_OFFSETOF(ArgList, m_argCount)));
+
+   // Calculate the start of the callframe header, and store in regT1
+   move(callFrameRegister, regT1);
+   sub32(Imm32(RegisterFile::CallFrameHeaderSize * (int32_t)sizeof(Register)), regT1);
+
+   // Calculate start of arguments as callframe header - sizeof(Register) * argcount (regT1)
+   mul32(Imm32(sizeof(Register)), regT0, regT0);
+   subPtr(regT0, regT1);
+
+   // push pointer to arguments to 40 + offset($sp)
+   storePtr(regT1, Address(stackPointerRegister, 40 + OBJECT_OFFSETOF(ArgList, m_args)));
+
+   // Argument passing method:
+   // a0 - points to the return value = 32($sp)
+   // a1 - callFrame
+   // a2 - calllee
+   // 16(sp), 20(sp) - this(JSValue)
+   // 24(sp) - pointer to ArgList = 40($sp)
+   // 28(sp) - padding
+   // 32(sp) - space for returned structure
+   // 36(sp) - space for returned structure
+
+   // Setup arg3: regT1 currently points to the first argument, regT1-sizeof(Register) points to 'this'
+   load32(Address(regT1, -(int32_t)sizeof(void *) * 2), MIPSRegisters::a3);
+   storePtr(MIPSRegisters::a3, Address(stackPointerRegister, 16));
+   load32(Address(regT1, -(int32_t)sizeof(void *)), MIPSRegisters::a3);
+   storePtr(MIPSRegisters::a3, Address(stackPointerRegister, 20));
+
+   // Setup arg2:
+   emitGetFromCallFrameHeaderPtr(RegisterFile::Callee, MIPSRegisters::a2);
+
+   // Setup arg1:
+   move(callFrameRegister, MIPSRegisters::a1);
+
+   // Setup arg4: ArgList is passed by reference. At 24($sp), store ($sp + 40)
+   addPtr(Imm32(40), stackPointerRegister, regT2);
+   storePtr(regT2, Address(stackPointerRegister, 24));
+
+   // Setup arg0 as 32 + $sp to hold the returned structure.
+   ASSERT(sizeof(JSValue) == 8);
+   addPtr(Imm32(32), stackPointerRegister, MIPSRegisters::a0);
+
+   // Call
+   call(Address(MIPSRegisters::a2, OBJECT_OFFSETOF(JSFunction, m_data)));
+
+   // Get returned value from 0($v0) which is the same as 32($sp)
+   loadPtr(Address(stackPointerRegister, 32), regT0);
+
+   // Get returned value from 4($v0) which is the same as 36($sp)
+   loadPtr(Address(stackPointerRegister, 36), regT1);
+
+   // Restore stack space
+   addPtr(Imm32(sizeof(ArgList) + 40), stackPointerRegister);
+
 #endif
 
     // Check for an exception
