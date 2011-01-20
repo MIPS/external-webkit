@@ -197,6 +197,10 @@ public:
 #elif CPU(MIPS)
     static void cacheFlush(void* code, size_t size)
     {
+#if defined(ANDROID)
+        char *end = reinterpret_cast<char *>(code) + size;
+        cacheflush(reinterpret_cast<intptr_t>(code), reinterpret_cast<intptr_t>(end), 0);
+#else
 #if COMPILER(GCC) && (GCC_VERSION >= 40300)
 #if WTF_MIPS_ISA_REV(2) && (GCC_VERSION < 40403)
         int lineSize;
@@ -218,6 +222,7 @@ public:
 #endif
 #else
         _flush_cache(reinterpret_cast<char*>(code), size, BCACHE);
+#endif
 #endif
     }
 #elif CPU(ARM_THUMB2) && OS(IPHONE_OS)
