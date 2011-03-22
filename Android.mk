@@ -223,6 +223,12 @@ LOCAL_CFLAGS += -fno-strict-aliasing
 LOCAL_CFLAGS += -include "WebCorePrefix.h"
 LOCAL_CFLAGS += -fvisibility=hidden
 
+ifeq ($(TARGET_ARCH),mips)
+ifndef ENABLE_JSC_JIT
+ENABLE_JSC_JIT := true
+endif
+endif
+
 # Enable JSC JIT if JSC is used and ENABLE_JSC_JIT environment
 # variable is set to true
 ifeq ($(JAVASCRIPT_ENGINE),jsc)
@@ -233,6 +239,12 @@ endif
 
 ifeq ($(TARGET_ARCH),arm)
 LOCAL_CFLAGS += -Darm
+# remove this warning: "note: the mangling of 'va_list' has changed in GCC 4.4"
+LOCAL_CFLAGS += -Wno-psabi
+endif
+
+ifeq ($(TARGET_ARCH),mips)
+LOCAL_CFLAGS += -Dmips
 # remove this warning: "note: the mangling of 'va_list' has changed in GCC 4.4"
 LOCAL_CFLAGS += -Wno-psabi
 endif
