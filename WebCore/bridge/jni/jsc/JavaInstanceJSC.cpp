@@ -94,7 +94,7 @@ JSValue JavaInstance::stringValue(ExecState* exec) const
 {
     JSLock lock(SilenceAssertionsOnly);
 
-#if (__GNUC__ == 4 && __GNUC_MINOR__ == 4 && __GNUC_PATCHLEVEL__ == 3)
+#if (__GNUC__ == 4 && __GNUC_MINOR__ == 4 )
     // prevent gcc-4.4.3 from compliing this template differently
     // to the ones in JavaClassJSC.cpp and JNIBridgeJSC.cpp
     static const char *jnimethodargs[] = {
