@@ -1160,6 +1160,8 @@ static NEVER_INLINE void throwStackOverflowError(CallFrame* callFrame, JSGlobalD
 
 #elif CPU(MIPS)
 #if WTF_MIPS_PIC
+
+#if !defined(__mips16)
 #define DEFINE_STUB_FUNCTION(rtype, op) \
     extern "C" { \
         rtype JITStubThunked_##op(STUB_ARGS_DECLARATION); \
@@ -1188,6 +1190,37 @@ static NEVER_INLINE void throwStackOverflowError(CallFrame* callFrame, JSGlobalD
         ".end " SYMBOL_STRING(cti_##op) "\n" \
         ); \
     rtype JITStubThunked_##op(STUB_ARGS_DECLARATION)
+#else /* MIPS 16 */
+#define DEFINE_STUB_FUNCTION(rtype, op) \
+    extern "C" { \
+        rtype JITStubThunked_##op(STUB_ARGS_DECLARATION); \
+    }; \
+    asm volatile( \
+        ".text" "\n" \
+        ".align 2" "\n" \
+        ".set noreorder" "\n" \
+        ".set nomacro" "\n" \
+        ".set nomips16" "\n" \
+        ".globl " SYMBOL_STRING(cti_##op) "\n" \
+        ".ent " SYMBOL_STRING(cti_##op) "\n" \
+        SYMBOL_STRING(cti_##op) ":" "\n" \
+        "lw    $28," STRINGIZE_VALUE_OF(PRESERVED_GP_OFFSET) "($29)" "\n" \
+        "sw    $31," STRINGIZE_VALUE_OF(THUNK_RETURN_ADDRESS_OFFSET) "($29)" "\n" \
+        ".set macro" "\n" \
+        "la    $25," SYMBOL_STRING(JITStubThunked_##op) "\n" \
+        ".set nomacro" "\n" \
+        ".reloc 1f,R_MIPS_JALR," SYMBOL_STRING(JITStubThunked_##op) "\n" \
+        "1: jalr $25" "\n" \
+        "nop" "\n" \
+        "lw    $31," STRINGIZE_VALUE_OF(THUNK_RETURN_ADDRESS_OFFSET) "($29)" "\n" \
+        "jr    $31" "\n" \
+        "nop" "\n" \
+        ".set reorder" "\n" \
+        ".set macro" "\n" \
+        ".end " SYMBOL_STRING(cti_##op) "\n" \
+        ); \
+    rtype JITStubThunked_##op(STUB_ARGS_DECLARATION)
+#endif
 
 #else // WTF_MIPS_PIC
 #define DEFINE_STUB_FUNCTION(rtype, op) \
