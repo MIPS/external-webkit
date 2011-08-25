@@ -57,14 +57,14 @@ LOCAL_SRC_FILES := \
 	android/jni/WebViewCore.cpp \
 	\
 	android/nav/CacheBuilder.cpp \
-	android/nav/CachedFrame.cpp \
+	android/nav/CachedFrame.cpp.arch \
 	android/nav/CachedHistory.cpp \
 	android/nav/CachedInput.cpp \
 	android/nav/CachedLayer.cpp \
 	android/nav/CachedNode.cpp \
 	android/nav/CachedRoot.cpp \
 	android/nav/FindCanvas.cpp \
-	android/nav/SelectText.cpp \
+	android/nav/SelectText.cpp.arch \
 	android/nav/WebView.cpp \
 	\
 	android/plugins/ANPBitmapInterface.cpp \
