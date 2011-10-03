@@ -234,9 +234,11 @@ LOCAL_CFLAGS += -include "WebCorePrefix.h"
 LOCAL_CFLAGS += -fvisibility=hidden
 
 ifeq ($(TARGET_ARCH),mips)
-ifndef ENABLE_JSC_JIT
-ENABLE_JSC_JIT := true
-endif
+    ifneq ($(ARCH_HAS_BIGENDIAN),true)
+        ifndef ENABLE_JSC_JIT
+            ENABLE_JSC_JIT := true
+        endif
+    endif
 endif
 
 # Enable JSC JIT if JSC is used and ENABLE_JSC_JIT environment
