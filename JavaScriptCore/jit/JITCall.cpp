@@ -49,6 +49,16 @@ namespace JSC {
 
 void JIT::compileOpCallInitializeCallFrame()
 {
+#if CPU(BIG_ENDIAN)
+    // regT1 holds callee, regT0 holds argCount
+    store32(regT0, Address(callFrameRegister, RegisterFile::ArgumentCount * static_cast<int>(sizeof(Register))));
+
+    loadPtr(Address(regT1, OBJECT_OFFSETOF(JSFunction, m_data) + OBJECT_OFFSETOF(ScopeChain, m_node)), regT0); // scopeChain
+
+    emitStore(static_cast<unsigned>(RegisterFile::OptionalCalleeArguments), JSValue());
+    storePtr(regT1, Address(callFrameRegister, RegisterFile::Callee * static_cast<int>(sizeof(Register)))); // callee
+    storePtr(regT0, Address(callFrameRegister, RegisterFile::ScopeChain * static_cast<int>(sizeof(Register)))); // scopeChain
+#else
     // regT0 holds callee, regT1 holds argCount
     store32(regT1, Address(callFrameRegister, RegisterFile::ArgumentCount * static_cast<int>(sizeof(Register))));
 
@@ -57,6 +67,7 @@ void JIT::compileOpCallInitializeCallFrame()
     emitStore(static_cast<unsigned>(RegisterFile::OptionalCalleeArguments), JSValue());
     storePtr(regT0, Address(callFrameRegister, RegisterFile::Callee * static_cast<int>(sizeof(Register)))); // callee
     storePtr(regT1, Address(callFrameRegister, RegisterFile::ScopeChain * static_cast<int>(sizeof(Register)))); // scopeChain
+#endif
 }
 
 void JIT::compileOpCallSetupArgs(Instruction* instruction)
@@ -64,7 +75,11 @@ void JIT::compileOpCallSetupArgs(Instruction* instruction)
     int argCount = instruction[3].u.operand;
     int registerOffset = instruction[4].u.operand;
 
+#if CPU(BIG_ENDIAN)
+    emitPutJITStubArg(regT0, regT1, 0);
+#else
     emitPutJITStubArg(regT1, regT0, 0);
+#endif
     emitPutJITStubArgConstant(registerOffset, 1);
     emitPutJITStubArgConstant(argCount, 2);
 }
@@ -76,7 +91,11 @@ void JIT::compileOpConstructSetupArgs(Instruction* instruction)
     int proto = instruction[5].u.operand;
     int thisRegister = instruction[6].u.operand;
 
+#if CPU(BIG_ENDIAN)
+    emitPutJITStubArg(regT0, regT1, 0);
+#else
     emitPutJITStubArg(regT1, regT0, 0);
+#endif
     emitPutJITStubArgConstant(registerOffset, 1);
     emitPutJITStubArgConstant(argCount, 2);
     emitPutJITStubArgFromVirtualRegister(proto, 3, regT2, regT3);
@@ -85,7 +104,11 @@ void JIT::compileOpConstructSetupArgs(Instruction* instruction)
 
 void JIT::compileOpCallVarargsSetupArgs(Instruction*)
 {
+#if CPU(BIG_ENDIAN)
+    emitPutJITStubArg(regT0, regT1, 0);
+#else
     emitPutJITStubArg(regT1, regT0, 0);
+#endif
     emitPutJITStubArg(regT3, 1); // registerOffset
     emitPutJITStubArg(regT2, 2); // argCount
 }
@@ -97,14 +120,23 @@ void JIT::compileOpCallVarargs(Instruction* instruction)
     int argCountRegister = instruction[3].u.operand;
     int registerOffset = instruction[4].u.operand;
 
+#if CPU(BIG_ENDIAN)
+    emitLoad(callee, regT0, regT1);
+#else
     emitLoad(callee, regT1, regT0);
+#endif
     emitLoadPayload(argCountRegister, regT2); // argCount
     addPtr(Imm32(registerOffset), regT2, regT3); // registerOffset
 
     compileOpCallVarargsSetupArgs(instruction);
 
+#if CPU(BIG_ENDIAN)
+    emitJumpSlowCaseIfNotJSCell(callee, regT0);
+    addSlowCase(branchPtr(NotEqual, Address(regT1), ImmPtr(m_globalData->jsFunctionVPtr)));
+#else
     emitJumpSlowCaseIfNotJSCell(callee, regT1);
     addSlowCase(branchPtr(NotEqual, Address(regT0), ImmPtr(m_globalData->jsFunctionVPtr)));
+#endif
 
     // Speculatively roll the callframe, assuming argCount will match the arity.
     mul32(Imm32(sizeof(Register)), regT3, regT3);
@@ -112,11 +144,19 @@ void JIT::compileOpCallVarargs(Instruction* instruction)
     storePtr(callFrameRegister, Address(regT3, RegisterFile::CallerFrame * static_cast<int>(sizeof(Register))));
     move(regT3, callFrameRegister);
 
+#if CPU(BIG_ENDIAN)
+    move(regT2, regT0); // argCount
+#else
     move(regT2, regT1); // argCount
+#endif
 
     emitNakedCall(m_globalData->jitStubs.ctiVirtualCall());
 
+#if CPU(BIG_ENDIAN)
+    emitStore(dst, regT0, regT1);
+#else
     emitStore(dst, regT1, regT0);
+#endif
     
     sampleCodeBlock(m_codeBlock);
 }
@@ -144,7 +184,11 @@ void JIT::emit_op_ret(Instruction* currentInstruction)
     if (m_codeBlock->needsFullScopeChain())
         JITStubCall(this, cti_op_ret_scopeChain).call();
 
+#if CPU(BIG_ENDIAN)
+    emitLoad(dst, regT0, regT1);
+#else
     emitLoad(dst, regT1, regT0);
+#endif
     emitGetFromCallFrameHeaderPtr(RegisterFile::ReturnPC, regT2);
     emitGetFromCallFrameHeaderPtr(RegisterFile::CallerFrame, callFrameRegister);
 
@@ -156,9 +200,15 @@ void JIT::emit_op_construct_verify(Instruction* currentInstruction)
 {
     unsigned dst = currentInstruction[1].u.operand;
 
+#if CPU(BIG_ENDIAN)
+    emitLoad(dst, regT0, regT1);
+    addSlowCase(branch32(NotEqual, regT0, Imm32(JSValue::CellTag)));
+    loadPtr(Address(regT1, OBJECT_OFFSETOF(JSCell, m_structure)), regT2);
+#else
     emitLoad(dst, regT1, regT0);
     addSlowCase(branch32(NotEqual, regT1, Imm32(JSValue::CellTag)));
     loadPtr(Address(regT0, OBJECT_OFFSETOF(JSCell, m_structure)), regT2);
+#endif
     addSlowCase(branch32(NotEqual, Address(regT2, OBJECT_OFFSETOF(Structure, m_typeInfo) + OBJECT_OFFSETOF(TypeInfo, m_type)), Imm32(ObjectType)));
 }
 
@@ -169,8 +219,13 @@ void JIT::emitSlow_op_construct_verify(Instruction* currentInstruction, Vector<S
 
     linkSlowCase(iter);
     linkSlowCase(iter);
+#if CPU(BIG_ENDIAN)
+    emitLoad(src, regT0, regT1);
+    emitStore(dst, regT0, regT1);
+#else
     emitLoad(src, regT1, regT0);
     emitStore(dst, regT1, regT0);
+#endif
 }
 
 void JIT::emitSlow_op_call(Instruction* currentInstruction, Vector<SlowCaseEntry>::iterator& iter)
@@ -212,7 +267,11 @@ void JIT::emit_op_load_varargs(Instruction* currentInstruction)
     stubCall.addArgument(Imm32(argsOffset));
     stubCall.call();
     // Stores a naked int32 in the register file.
+#if CPU(BIG_ENDIAN)
+    store32(returnValueRegister, Address(callFrameRegister, 4 + argCountDst * sizeof(Register)));
+#else
     store32(returnValueRegister, Address(callFrameRegister, argCountDst * sizeof(Register)));
+#endif
 }
 
 void JIT::emit_op_call_varargs(Instruction* currentInstruction)
@@ -243,36 +302,61 @@ void JIT::compileOpCall(OpcodeID opcodeID, Instruction* instruction, unsigned)
         stubCall.addArgument(JIT::Imm32(registerOffset));
         stubCall.addArgument(JIT::Imm32(argCount));
         stubCall.call();
+#if CPU(BIG_ENDIAN)
+        wasEval = branch32(NotEqual, regT0, Imm32(JSValue::EmptyValueTag));
+#else
         wasEval = branch32(NotEqual, regT1, Imm32(JSValue::EmptyValueTag));
+#endif
     }
 
+#if CPU(BIG_ENDIAN)
+    emitLoad(callee, regT0, regT1);
+#else
     emitLoad(callee, regT1, regT0);
+#endif
 
     if (opcodeID == op_call)
         compileOpCallSetupArgs(instruction);
     else if (opcodeID == op_construct)
         compileOpConstructSetupArgs(instruction);
 
+#if CPU(BIG_ENDIAN)
+    emitJumpSlowCaseIfNotJSCell(callee, regT0);
+    addSlowCase(branchPtr(NotEqual, Address(regT1), ImmPtr(m_globalData->jsFunctionVPtr)));
+#else
     emitJumpSlowCaseIfNotJSCell(callee, regT1);
     addSlowCase(branchPtr(NotEqual, Address(regT0), ImmPtr(m_globalData->jsFunctionVPtr)));
+#endif
 
     // First, in the case of a construct, allocate the new object.
     if (opcodeID == op_construct) {
         JITStubCall(this, cti_op_construct_JSConstruct).call(registerOffset - RegisterFile::CallFrameHeaderSize - argCount);
+#if CPU(BIG_ENDIAN)
+        emitLoad(callee, regT0, regT1);
+#else
         emitLoad(callee, regT1, regT0);
+#endif
     }
 
     // Speculatively roll the callframe, assuming argCount will match the arity.
     storePtr(callFrameRegister, Address(callFrameRegister, (RegisterFile::CallerFrame + registerOffset) * static_cast<int>(sizeof(Register))));
     addPtr(Imm32(registerOffset * static_cast<int>(sizeof(Register))), callFrameRegister);
+#if CPU(BIG_ENDIAN)
+    move(Imm32(argCount), regT0);
+#else
     move(Imm32(argCount), regT1);
+#endif
 
     emitNakedCall(m_globalData->jitStubs.ctiVirtualCall());
 
     if (opcodeID == op_call_eval)
         wasEval.link(this);
 
+#if CPU(BIG_ENDIAN)
+    emitStore(dst, regT0, regT1);
+#else
     emitStore(dst, regT1, regT0);
+#endif
 
     sampleCodeBlock(m_codeBlock);
 }
@@ -309,16 +393,28 @@ void JIT::compileOpCall(OpcodeID opcodeID, Instruction* instruction, unsigned ca
         stubCall.addArgument(JIT::Imm32(registerOffset));
         stubCall.addArgument(JIT::Imm32(argCount));
         stubCall.call();
+#if CPU(BIG_ENDIAN)
+        wasEval = branch32(NotEqual, regT0, Imm32(JSValue::EmptyValueTag));
+#else
         wasEval = branch32(NotEqual, regT1, Imm32(JSValue::EmptyValueTag));
+#endif
     }
 
+#if CPU(BIG_ENDIAN)
+    emitLoad(callee, regT0, regT1);
+#else
     emitLoad(callee, regT1, regT0);
+#endif
 
     DataLabelPtr addressOfLinkedFunctionCheck;
 
     BEGIN_UNINTERRUPTED_SEQUENCE(sequenceOpCall);
 
+#if CPU(BIG_ENDIAN)
+    Jump jumpToSlow = branchPtrWithPatch(NotEqual, regT1, addressOfLinkedFunctionCheck, ImmPtr(0));
+#else
     Jump jumpToSlow = branchPtrWithPatch(NotEqual, regT0, addressOfLinkedFunctionCheck, ImmPtr(0));
+#endif
 
     END_UNINTERRUPTED_SEQUENCE(sequenceOpCall);
 
@@ -326,7 +422,11 @@ void JIT::compileOpCall(OpcodeID opcodeID, Instruction* instruction, unsigned ca
     ASSERT(differenceBetween(addressOfLinkedFunctionCheck, jumpToSlow) == patchOffsetOpCallCompareToJump);
     m_callStructureStubCompilationInfo[callLinkInfoIndex].hotPathBegin = addressOfLinkedFunctionCheck;
 
+#if CPU(BIG_ENDIAN)
+    addSlowCase(branch32(NotEqual, regT0, Imm32(JSValue::CellTag)));
+#else
     addSlowCase(branch32(NotEqual, regT1, Imm32(JSValue::CellTag)));
+#endif
 
     // The following is the fast case, only used whan a callee can be linked.
 
@@ -336,24 +436,47 @@ void JIT::compileOpCall(OpcodeID opcodeID, Instruction* instruction, unsigned ca
         int thisRegister = instruction[6].u.operand;
 
         JITStubCall stubCall(this, cti_op_construct_JSConstruct);
+#if CPU(BIG_ENDIAN)
+        stubCall.addArgument(regT0, regT1);
+#else
         stubCall.addArgument(regT1, regT0);
+#endif
         stubCall.addArgument(Imm32(0)); // FIXME: Remove this unused JITStub argument.
         stubCall.addArgument(Imm32(0)); // FIXME: Remove this unused JITStub argument.
         stubCall.addArgument(proto);
         stubCall.call(thisRegister);
 
+#if CPU(BIG_ENDIAN)
+        emitLoad(callee, regT0, regT1);
+#else
         emitLoad(callee, regT1, regT0);
+#endif
     }
 
     // Fast version of stack frame initialization, directly relative to edi.
     // Note that this omits to set up RegisterFile::CodeBlock, which is set in the callee
     emitStore(registerOffset + RegisterFile::OptionalCalleeArguments, JSValue());
+#if CPU(BIG_ENDIAN)
+    // NOTE: we still emit the same sequence as little-endian code,
+    //       so that callee can be accessed from the correct offset.
+    //       Ex: emitGetFromCallFrameHeaderPtr(RegisterFile::Callee, ...);
     emitStore(registerOffset + RegisterFile::Callee, regT1, regT0);
+#else
+    emitStore(registerOffset + RegisterFile::Callee, regT1, regT0);
+#endif
 
+#if CPU(BIG_ENDIAN)
+    loadPtr(Address(regT1, OBJECT_OFFSETOF(JSFunction, m_data) + OBJECT_OFFSETOF(ScopeChain, m_node)), regT0); // newScopeChain
+#else
     loadPtr(Address(regT0, OBJECT_OFFSETOF(JSFunction, m_data) + OBJECT_OFFSETOF(ScopeChain, m_node)), regT1); // newScopeChain
+#endif
     store32(Imm32(argCount), Address(callFrameRegister, (registerOffset + RegisterFile::ArgumentCount) * static_cast<int>(sizeof(Register))));
     storePtr(callFrameRegister, Address(callFrameRegister, (registerOffset + RegisterFile::CallerFrame) * static_cast<int>(sizeof(Register))));
+#if CPU(BIG_ENDIAN)
+    storePtr(regT0, Address(callFrameRegister, (registerOffset + RegisterFile::ScopeChain) * static_cast<int>(sizeof(Register))));
+#else
     storePtr(regT1, Address(callFrameRegister, (registerOffset + RegisterFile::ScopeChain) * static_cast<int>(sizeof(Register))));
+#endif
     addPtr(Imm32(registerOffset * sizeof(Register)), callFrameRegister);
 
     // Call to the callee
@@ -363,8 +486,13 @@ void JIT::compileOpCall(OpcodeID opcodeID, Instruction* instruction, unsigned ca
         wasEval.link(this);
 
     // Put the return value in dst. In the interpreter, op_ret does this.
+#if CPU(BIG_ENDIAN)
+    emitStore(dst, regT0, regT1);
+    map(m_bytecodeIndex + opcodeLengths[opcodeID], dst, regT0, regT1);
+#else
     emitStore(dst, regT1, regT0);
     map(m_bytecodeIndex + opcodeLengths[opcodeID], dst, regT1, regT0);
+#endif
 
     sampleCodeBlock(m_codeBlock);
 }
@@ -386,24 +514,41 @@ void JIT::compileOpCallSlowCase(Instruction* instruction, Vector<SlowCaseEntry>:
         compileOpConstructSetupArgs(instruction);
 
     // Fast check for JS function.
+#if CPU(BIG_ENDIAN)
+    Jump callLinkFailNotObject = branch32(NotEqual, regT0, Imm32(JSValue::CellTag));
+    Jump callLinkFailNotJSFunction = branchPtr(NotEqual, Address(regT1), ImmPtr(m_globalData->jsFunctionVPtr));
+#else
     Jump callLinkFailNotObject = branch32(NotEqual, regT1, Imm32(JSValue::CellTag));
     Jump callLinkFailNotJSFunction = branchPtr(NotEqual, Address(regT0), ImmPtr(m_globalData->jsFunctionVPtr));
+#endif
 
     // First, in the case of a construct, allocate the new object.
     if (opcodeID == op_construct) {
         JITStubCall(this, cti_op_construct_JSConstruct).call(registerOffset - RegisterFile::CallFrameHeaderSize - argCount);
+#if CPU(BIG_ENDIAN)
+        emitLoad(callee, regT0, regT1);
+#else
         emitLoad(callee, regT1, regT0);
+#endif
     }
 
     // Speculatively roll the callframe, assuming argCount will match the arity.
     storePtr(callFrameRegister, Address(callFrameRegister, (RegisterFile::CallerFrame + registerOffset) * static_cast<int>(sizeof(Register))));
     addPtr(Imm32(registerOffset * static_cast<int>(sizeof(Register))), callFrameRegister);
+#if CPU(BIG_ENDIAN)
+    move(Imm32(argCount), regT0);
+#else
     move(Imm32(argCount), regT1);
+#endif
 
     m_callStructureStubCompilationInfo[callLinkInfoIndex].callReturnLocation = emitNakedCall(m_globalData->jitStubs.ctiVirtualCallLink());
 
     // Put the return value in dst.
+#if CPU(BIG_ENDIAN)
+    emitStore(dst, regT0, regT1);;
+#else
     emitStore(dst, regT1, regT0);;
+#endif
     sampleCodeBlock(m_codeBlock);
 
     // If not, we need an extra case in the if below!
@@ -420,7 +565,11 @@ void JIT::compileOpCallSlowCase(Instruction* instruction, Vector<SlowCaseEntry>:
     callLinkFailNotJSFunction.link(this);
     JITStubCall(this, opcodeID == op_construct ? cti_op_construct_NotJSConstruct : cti_op_call_NotJSFunction).call();
 
+#if CPU(BIG_ENDIAN)
+    emitStore(dst, regT0, regT1);;
+#else
     emitStore(dst, regT1, regT0);;
+#endif
     sampleCodeBlock(m_codeBlock);
 }
 

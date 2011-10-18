@@ -50,6 +50,21 @@ void JIT::privateCompileCTIMachineTrampolines(RefPtr<ExecutablePool>* executable
     // (1) This function provides fast property access for string length
     Label stringLengthBegin = align();
     
+#if CPU(BIG_ENDIAN)
+    // regT1 holds payload, regT0 holds tag
+
+    Jump string_failureCases1 = branch32(NotEqual, regT0, Imm32(JSValue::CellTag));
+    Jump string_failureCases2 = branchPtr(NotEqual, Address(regT1), ImmPtr(m_globalData->jsStringVPtr));
+
+    // Checks out okay! - get the length from the Ustring.
+    load32(Address(regT1, OBJECT_OFFSETOF(JSString, m_stringLength)), regT2);
+
+    Jump string_failureCases3 = branch32(Above, regT2, Imm32(INT_MAX));
+    move(regT2, regT1);
+    move(Imm32(JSValue::Int32Tag), regT0);
+
+    ret();
+#else
     // regT0 holds payload, regT1 holds tag
     
     Jump string_failureCases1 = branch32(NotEqual, regT1, Imm32(JSValue::CellTag));
@@ -64,14 +79,20 @@ void JIT::privateCompileCTIMachineTrampolines(RefPtr<ExecutablePool>* executable
 
     ret();
 #endif
+#endif
 
     // (2) Trampolines for the slow cases of op_call / op_call_eval / op_construct.
 
 #if ENABLE(JIT_OPTIMIZE_CALL)
     // VirtualCallLink Trampoline
-    // regT0 holds callee, regT1 holds argCount.  regT2 will hold the FunctionExecutable.
     Label virtualCallLinkBegin = align();
+#if CPU(BIG_ENDIAN)
+    // regT1 holds callee, regT0 holds argCount.  regT2 will hold the FunctionExecutable.
+    loadPtr(Address(regT1, OBJECT_OFFSETOF(JSFunction, m_executable)), regT2);
+#else
+    // regT0 holds callee, regT1 holds argCount.  regT2 will hold the FunctionExecutable.
     loadPtr(Address(regT0, OBJECT_OFFSETOF(JSFunction, m_executable)), regT2);
+#endif
 
     Jump isNativeFunc2 = branch32(Equal, Address(regT2, OBJECT_OFFSETOF(FunctionExecutable, m_numParameters)), Imm32(0));
 
@@ -80,18 +101,32 @@ void JIT::privateCompileCTIMachineTrampolines(RefPtr<ExecutablePool>* executable
     restoreArgumentReference();
     Call callJSFunction2 = call();
     loadPtr(Address(regT0, OBJECT_OFFSETOF(JSFunction, m_executable)), regT2);
+#if CPU(BIG_ENDIAN)
+    move(regT0,regT1);
+    emitGetJITStubArg(2, regT0); // argCount
+#else
     emitGetJITStubArg(2, regT1); // argCount
+#endif
     restoreReturnAddressBeforeReturn(regT3);
     hasCodeBlock2.link(this);
 
     // Check argCount matches callee arity.
+#if CPU(BIG_ENDIAN)
+    Jump arityCheckOkay2 = branch32(Equal, Address(regT2, OBJECT_OFFSETOF(FunctionExecutable, m_numParameters)), regT0);
+#else
     Jump arityCheckOkay2 = branch32(Equal, Address(regT2, OBJECT_OFFSETOF(FunctionExecutable, m_numParameters)), regT1);
+#endif
     preserveReturnAddressAfterCall(regT3);
     emitPutJITStubArg(regT3, 1); // return address
     restoreArgumentReference();
     Call callArityCheck2 = call();
     move(regT1, callFrameRegister);
+#if CPU(BIG_ENDIAN)
+    move(regT0, regT1);
+    emitGetJITStubArg(2, regT0); // argCount
+#else
     emitGetJITStubArg(2, regT1); // argCount
+#endif
     restoreReturnAddressBeforeReturn(regT3);
     arityCheckOkay2.link(this);
 
@@ -108,9 +143,14 @@ void JIT::privateCompileCTIMachineTrampolines(RefPtr<ExecutablePool>* executable
 #endif // ENABLE(JIT_OPTIMIZE_CALL)
 
     // VirtualCall Trampoline
-    // regT0 holds callee, regT1 holds argCount.  regT2 will hold the FunctionExecutable.
     Label virtualCallBegin = align();
+#if CPU(BIG_ENDIAN)
+    // regT1 holds callee, regT0 holds argCount.  regT2 will hold the FunctionExecutable.
+    loadPtr(Address(regT1, OBJECT_OFFSETOF(JSFunction, m_executable)), regT2);
+#else
+    // regT0 holds callee, regT1 holds argCount.  regT2 will hold the FunctionExecutable.
     loadPtr(Address(regT0, OBJECT_OFFSETOF(JSFunction, m_executable)), regT2);
+#endif
 
     Jump isNativeFunc3 = branch32(Equal, Address(regT2, OBJECT_OFFSETOF(FunctionExecutable, m_numParameters)), Imm32(0));
 
@@ -118,21 +158,35 @@ void JIT::privateCompileCTIMachineTrampolines(RefPtr<ExecutablePool>* executable
     preserveReturnAddressAfterCall(regT3);
     restoreArgumentReference();
     Call callJSFunction1 = call();
-    emitGetJITStubArg(2, regT1); // argCount
     restoreReturnAddressBeforeReturn(regT3);
     loadPtr(Address(regT0, OBJECT_OFFSETOF(JSFunction, m_executable)), regT2);
+#if CPU(BIG_ENDIAN)
+    move(regT0, regT1);
+    emitGetJITStubArg(2, regT0); // argCount
+#else
+    emitGetJITStubArg(2, regT1); // argCount
+#endif
     hasCodeBlock3.link(this);
     
     // Check argCount matches callee arity.
+#if CPU(BIG_ENDIAN)
+    Jump arityCheckOkay3 = branch32(Equal, Address(regT2, OBJECT_OFFSETOF(FunctionExecutable, m_numParameters)), regT0);
+#else
     Jump arityCheckOkay3 = branch32(Equal, Address(regT2, OBJECT_OFFSETOF(FunctionExecutable, m_numParameters)), regT1);
+#endif
     preserveReturnAddressAfterCall(regT3);
     emitPutJITStubArg(regT3, 1); // return address
     restoreArgumentReference();
     Call callArityCheck1 = call();
     move(regT1, callFrameRegister);
-    emitGetJITStubArg(2, regT1); // argCount
     restoreReturnAddressBeforeReturn(regT3);
     loadPtr(Address(regT0, OBJECT_OFFSETOF(JSFunction, m_executable)), regT2);
+#if CPU(BIG_ENDIAN)
+    move(regT0, regT1);
+    emitGetJITStubArg(2, regT0); // argCount
+#else
+    emitGetJITStubArg(2, regT1); // argCount
+#endif
     arityCheckOkay3.link(this);
 
     isNativeFunc3.link(this);
@@ -460,9 +514,15 @@ void JIT::emit_op_mov(Instruction* currentInstruction)
     if (m_codeBlock->isConstantRegisterIndex(src))
         emitStore(dst, getConstantOperand(src));
     else {
+#if CPU(BIG_ENDIAN)
+        emitLoad(src, regT0, regT1);
+        emitStore(dst, regT0, regT1);
+        map(m_bytecodeIndex + OPCODE_LENGTH(op_mov), dst, regT0, regT1);
+#else
         emitLoad(src, regT1, regT0);
         emitStore(dst, regT1, regT0);
         map(m_bytecodeIndex + OPCODE_LENGTH(op_mov), dst, regT1, regT0);
+#endif
     }
 }
 
@@ -471,7 +531,11 @@ void JIT::emit_op_end(Instruction* currentInstruction)
     if (m_codeBlock->needsFullScopeChain())
         JITStubCall(this, cti_op_end).call();
     ASSERT(returnValueRegister != callFrameRegister);
+#if CPU(BIG_ENDIAN)
+    emitLoad(currentInstruction[1].u.operand, regT0, regT1);
+#else
     emitLoad(currentInstruction[1].u.operand, regT1, regT0);
+#endif
     restoreReturnAddressBeforeReturn(Address(callFrameRegister, RegisterFile::ReturnPC * static_cast<int>(sizeof(Register))));
     ret();
 }
@@ -491,23 +555,42 @@ void JIT::emit_op_loop_if_lesseq(Instruction* currentInstruction)
     emitTimeoutCheck();
 
     if (isOperandConstantImmediateInt(op1)) {
+#if CPU(BIG_ENDIAN)
+        emitLoad(op2, regT0, regT1);
+        addSlowCase(branch32(NotEqual, regT0, Imm32(JSValue::Int32Tag)));
+        addJump(branch32(GreaterThanOrEqual, regT1, Imm32(getConstantOperand(op1).asInt32())), target);
+#else
         emitLoad(op2, regT1, regT0);
         addSlowCase(branch32(NotEqual, regT1, Imm32(JSValue::Int32Tag)));
         addJump(branch32(GreaterThanOrEqual, regT0, Imm32(getConstantOperand(op1).asInt32())), target);
+#endif
         return;
     }
 
     if (isOperandConstantImmediateInt(op2)) {
+#if CPU(BIG_ENDIAN)
+        emitLoad(op1, regT0, regT1);
+        addSlowCase(branch32(NotEqual, regT0, Imm32(JSValue::Int32Tag)));
+        addJump(branch32(LessThanOrEqual, regT1, Imm32(getConstantOperand(op2).asInt32())), target);
+#else
         emitLoad(op1, regT1, regT0);
         addSlowCase(branch32(NotEqual, regT1, Imm32(JSValue::Int32Tag)));
         addJump(branch32(LessThanOrEqual, regT0, Imm32(getConstantOperand(op2).asInt32())), target);
+#endif
         return;
     }
 
+#if CPU(BIG_ENDIAN)
+    emitLoad2(op1, regT0, regT1, op2, regT3, regT2);
+    addSlowCase(branch32(NotEqual, regT0, Imm32(JSValue::Int32Tag)));
+    addSlowCase(branch32(NotEqual, regT3, Imm32(JSValue::Int32Tag)));
+    addJump(branch32(LessThanOrEqual, regT1, regT2), target);
+#else
     emitLoad2(op1, regT1, regT0, op2, regT3, regT2);
     addSlowCase(branch32(NotEqual, regT1, Imm32(JSValue::Int32Tag)));
     addSlowCase(branch32(NotEqual, regT3, Imm32(JSValue::Int32Tag)));
     addJump(branch32(LessThanOrEqual, regT0, regT2), target);
+#endif
 }
 
 void JIT::emitSlow_op_loop_if_lesseq(Instruction* currentInstruction, Vector<SlowCaseEntry>::iterator& iter)
@@ -610,9 +693,15 @@ void JIT::emit_op_get_global_var(Instruction* currentInstruction)
 
     loadPtr(&globalObject->d()->registers, regT2);
 
+#if CPU(BIG_ENDIAN)
+    emitLoad(index, regT0, regT1, regT2);
+    emitStore(dst, regT0, regT1);
+    map(m_bytecodeIndex + OPCODE_LENGTH(op_get_global_var), dst, regT0, regT1);
+#else
     emitLoad(index, regT1, regT0, regT2);
     emitStore(dst, regT1, regT0);
     map(m_bytecodeIndex + OPCODE_LENGTH(op_get_global_var), dst, regT1, regT0);
+#endif
 }
 
 void JIT::emit_op_put_global_var(Instruction* currentInstruction)
@@ -622,11 +711,19 @@ void JIT::emit_op_put_global_var(Instruction* currentInstruction)
     int index = currentInstruction[2].u.operand;
     int value = currentInstruction[3].u.operand;
 
+#if CPU(BIG_ENDIAN)
+    emitLoad(value, regT0, regT1);
+
+    loadPtr(&globalObject->d()->registers, regT2);
+    emitStore(index, regT0, regT1, regT2);
+    map(m_bytecodeIndex + OPCODE_LENGTH(op_put_global_var), value, regT0, regT1);
+#else
     emitLoad(value, regT1, regT0);
 
     loadPtr(&globalObject->d()->registers, regT2);
     emitStore(index, regT1, regT0, regT2);
     map(m_bytecodeIndex + OPCODE_LENGTH(op_put_global_var), value, regT1, regT0);
+#endif
 }
 
 void JIT::emit_op_get_scoped_var(Instruction* currentInstruction)
@@ -643,9 +740,15 @@ void JIT::emit_op_get_scoped_var(Instruction* currentInstruction)
     loadPtr(Address(regT2, OBJECT_OFFSETOF(JSVariableObject, d)), regT2);
     loadPtr(Address(regT2, OBJECT_OFFSETOF(JSVariableObject::JSVariableObjectData, registers)), regT2);
 
+#if CPU(BIG_ENDIAN)
+    emitLoad(index, regT0, regT1, regT2);
+    emitStore(dst, regT0, regT1);
+    map(m_bytecodeIndex + OPCODE_LENGTH(op_get_scoped_var), dst, regT0, regT1);
+#else
     emitLoad(index, regT1, regT0, regT2);
     emitStore(dst, regT1, regT0);
     map(m_bytecodeIndex + OPCODE_LENGTH(op_get_scoped_var), dst, regT1, regT0);
+#endif
 }
 
 void JIT::emit_op_put_scoped_var(Instruction* currentInstruction)
@@ -654,7 +757,11 @@ void JIT::emit_op_put_scoped_var(Instruction* currentInstruction)
     int skip = currentInstruction[2].u.operand + m_codeBlock->needsFullScopeChain();
     int value = currentInstruction[3].u.operand;
 
+#if CPU(BIG_ENDIAN)
+    emitLoad(value, regT0, regT1);
+#else
     emitLoad(value, regT1, regT0);
+#endif
 
     emitGetFromCallFrameHeaderPtr(RegisterFile::ScopeChain, regT2);
     while (skip--)
@@ -664,8 +771,13 @@ void JIT::emit_op_put_scoped_var(Instruction* currentInstruction)
     loadPtr(Address(regT2, OBJECT_OFFSETOF(JSVariableObject, d)), regT2);
     loadPtr(Address(regT2, OBJECT_OFFSETOF(JSVariableObject::JSVariableObjectData, registers)), regT2);
 
+#if CPU(BIG_ENDIAN)
+    emitStore(index, regT0, regT1, regT2);
+    map(m_bytecodeIndex + OPCODE_LENGTH(op_put_scoped_var), value, regT0, regT1);
+#else
     emitStore(index, regT1, regT0, regT2);
     map(m_bytecodeIndex + OPCODE_LENGTH(op_put_scoped_var), value, regT1, regT0);
+#endif
 }
 
 void JIT::emit_op_tear_off_activation(Instruction* currentInstruction)
@@ -700,6 +812,17 @@ void JIT::emit_op_to_primitive(Instruction* currentInstruction)
     int dst = currentInstruction[1].u.operand;
     int src = currentInstruction[2].u.operand;
 
+#if CPU(BIG_ENDIAN)
+    emitLoad(src, regT0, regT1);
+
+    Jump isImm = branch32(NotEqual, regT0, Imm32(JSValue::CellTag));
+    addSlowCase(branchPtr(NotEqual, Address(regT1), ImmPtr(m_globalData->jsStringVPtr)));
+    isImm.link(this);
+
+    if (dst != src)
+        emitStore(dst, regT0, regT1);
+    map(m_bytecodeIndex + OPCODE_LENGTH(op_to_primitive), dst, regT0, regT1);
+#else
     emitLoad(src, regT1, regT0);
 
     Jump isImm = branch32(NotEqual, regT1, Imm32(JSValue::CellTag));
@@ -709,6 +832,7 @@ void JIT::emit_op_to_primitive(Instruction* currentInstruction)
     if (dst != src)
         emitStore(dst, regT1, regT0);
     map(m_bytecodeIndex + OPCODE_LENGTH(op_to_primitive), dst, regT1, regT0);
+#endif
 }
 
 void JIT::emitSlow_op_to_primitive(Instruction* currentInstruction, Vector<SlowCaseEntry>::iterator& iter)
@@ -718,7 +842,11 @@ void JIT::emitSlow_op_to_primitive(Instruction* currentInstruction, Vector<SlowC
     linkSlowCase(iter);
 
     JITStubCall stubCall(this, cti_op_to_primitive);
+#if CPU(BIG_ENDIAN)
+    stubCall.addArgument(regT0, regT1);
+#else
     stubCall.addArgument(regT1, regT0);
+#endif
     stubCall.call(dst);
 }
 
@@ -756,6 +884,20 @@ void JIT::emit_op_resolve_global(Instruction* currentInstruction)
     void* structureAddress = &(m_codeBlock->globalResolveInfo(currentIndex).structure);
     void* offsetAddr = &(m_codeBlock->globalResolveInfo(currentIndex).offset);
 
+#if CPU(BIG_ENDIAN)
+    // Verify structure.
+    move(ImmPtr(globalObject), regT1);
+    loadPtr(structureAddress, regT0);
+    addSlowCase(branchPtr(NotEqual, regT0, Address(regT1, OBJECT_OFFSETOF(JSCell, m_structure))));
+
+    // Load property.
+    loadPtr(Address(regT1, OBJECT_OFFSETOF(JSGlobalObject, m_externalStorage)), regT2);
+    load32(offsetAddr, regT3);
+    load32(BaseIndex(regT2, regT3, TimesEight, OBJECT_OFFSETOF(JSValue, u.asBits.payload)), regT1); // payload
+    load32(BaseIndex(regT2, regT3, TimesEight, OBJECT_OFFSETOF(JSValue, u.asBits.tag)), regT0); // tag
+    emitStore(dst, regT0, regT1);
+    map(m_bytecodeIndex + OPCODE_LENGTH(op_resolve_global), dst, regT0, regT1);
+#else
     // Verify structure.
     move(ImmPtr(globalObject), regT0);
     loadPtr(structureAddress, regT1);
@@ -764,10 +906,11 @@ void JIT::emit_op_resolve_global(Instruction* currentInstruction)
     // Load property.
     loadPtr(Address(regT0, OBJECT_OFFSETOF(JSGlobalObject, m_externalStorage)), regT2);
     load32(offsetAddr, regT3);
-    load32(BaseIndex(regT2, regT3, TimesEight), regT0); // payload
-    load32(BaseIndex(regT2, regT3, TimesEight, 4), regT1); // tag
+    load32(BaseIndex(regT2, regT3, TimesEight, OBJECT_OFFSETOF(JSValue, u.asBits.payload)), regT0); // payload
+    load32(BaseIndex(regT2, regT3, TimesEight, OBJECT_OFFSETOF(JSValue, u.asBits.tag)), regT1); // tag
     emitStore(dst, regT1, regT0);
     map(m_bytecodeIndex + OPCODE_LENGTH(op_resolve_global), dst, regT1, regT0);
+#endif
 }
 
 void JIT::emitSlow_op_resolve_global(Instruction* currentInstruction, Vector<SlowCaseEntry>::iterator& iter)
@@ -817,6 +960,15 @@ void JIT::emit_op_jfalse(Instruction* currentInstruction)
     unsigned cond = currentInstruction[1].u.operand;
     unsigned target = currentInstruction[2].u.operand;
 
+#if CPU(BIG_ENDIAN)
+    emitLoad(cond, regT0, regT1);
+
+    Jump isTrue = branch32(Equal, regT0, Imm32(JSValue::TrueTag));
+    addJump(branch32(Equal, regT0, Imm32(JSValue::FalseTag)), target);
+
+    Jump isNotInteger = branch32(NotEqual, regT0, Imm32(JSValue::Int32Tag));
+    Jump isTrue2 = branch32(NotEqual, regT1, Imm32(0));
+#else
     emitLoad(cond, regT1, regT0);
 
     Jump isTrue = branch32(Equal, regT1, Imm32(JSValue::TrueTag));
@@ -824,12 +976,17 @@ void JIT::emit_op_jfalse(Instruction* currentInstruction)
 
     Jump isNotInteger = branch32(NotEqual, regT1, Imm32(JSValue::Int32Tag));
     Jump isTrue2 = branch32(NotEqual, regT0, Imm32(0));
+#endif
     addJump(jump(), target);
 
     if (supportsFloatingPoint()) {
         isNotInteger.link(this);
 
+#if CPU(BIG_ENDIAN)
+        addSlowCase(branch32(Above, regT0, Imm32(JSValue::LowestTag)));
+#else
         addSlowCase(branch32(Above, regT1, Imm32(JSValue::LowestTag)));
+#endif
 
         zeroDouble(fpRegT0);
         emitLoadDouble(cond, fpRegT1);
@@ -858,6 +1015,15 @@ void JIT::emit_op_jtrue(Instruction* currentInstruction)
     unsigned cond = currentInstruction[1].u.operand;
     unsigned target = currentInstruction[2].u.operand;
 
+#if CPU(BIG_ENDIAN)
+    emitLoad(cond, regT0, regT1);
+
+    Jump isFalse = branch32(Equal, regT0, Imm32(JSValue::FalseTag));
+    addJump(branch32(Equal, regT0, Imm32(JSValue::TrueTag)), target);
+
+    Jump isNotInteger = branch32(NotEqual, regT0, Imm32(JSValue::Int32Tag));
+    Jump isFalse2 = branch32(Equal, regT1, Imm32(0));
+#else
     emitLoad(cond, regT1, regT0);
 
     Jump isFalse = branch32(Equal, regT1, Imm32(JSValue::FalseTag));
@@ -865,12 +1031,17 @@ void JIT::emit_op_jtrue(Instruction* currentInstruction)
 
     Jump isNotInteger = branch32(NotEqual, regT1, Imm32(JSValue::Int32Tag));
     Jump isFalse2 = branch32(Equal, regT0, Imm32(0));
+#endif
     addJump(jump(), target);
 
     if (supportsFloatingPoint()) {
         isNotInteger.link(this);
 
+#if CPU(BIG_ENDIAN)
+        addSlowCase(branch32(Above, regT0, Imm32(JSValue::LowestTag)));
+#else
         addSlowCase(branch32(Above, regT1, Imm32(JSValue::LowestTag)));
+#endif
 
         zeroDouble(fpRegT0);
         emitLoadDouble(cond, fpRegT1);
@@ -899,12 +1070,22 @@ void JIT::emit_op_jeq_null(Instruction* currentInstruction)
     unsigned src = currentInstruction[1].u.operand;
     unsigned target = currentInstruction[2].u.operand;
 
+#if CPU(BIG_ENDIAN)
+    emitLoad(src, regT0, regT1);
+
+    Jump isImmediate = branch32(NotEqual, regT0, Imm32(JSValue::CellTag));
+#else
     emitLoad(src, regT1, regT0);
 
     Jump isImmediate = branch32(NotEqual, regT1, Imm32(JSValue::CellTag));
+#endif
 
     // First, handle JSCell cases - check MasqueradesAsUndefined bit on the structure.
+#if CPU(BIG_ENDIAN)
+    loadPtr(Address(regT1, OBJECT_OFFSETOF(JSCell, m_structure)), regT2);
+#else
     loadPtr(Address(regT0, OBJECT_OFFSETOF(JSCell, m_structure)), regT2);
+#endif
     addJump(branchTest32(NonZero, Address(regT2, OBJECT_OFFSETOF(Structure, m_typeInfo.m_flags)), Imm32(MasqueradesAsUndefined)), target);
 
     Jump wasNotImmediate = jump();
@@ -912,11 +1093,19 @@ void JIT::emit_op_jeq_null(Instruction* currentInstruction)
     // Now handle the immediate cases - undefined & null
     isImmediate.link(this);
 
+#if CPU(BIG_ENDIAN)
+    set32(Equal, regT0, Imm32(JSValue::NullTag), regT2);
+    set32(Equal, regT0, Imm32(JSValue::UndefinedTag), regT0);
+    or32(regT2, regT0);
+
+    addJump(branchTest32(NonZero, regT0), target);
+#else
     set32(Equal, regT1, Imm32(JSValue::NullTag), regT2);
     set32(Equal, regT1, Imm32(JSValue::UndefinedTag), regT1);
     or32(regT2, regT1);
 
     addJump(branchTest32(NonZero, regT1), target);
+#endif
 
     wasNotImmediate.link(this);
 }
@@ -926,12 +1115,22 @@ void JIT::emit_op_jneq_null(Instruction* currentInstruction)
     unsigned src = currentInstruction[1].u.operand;
     unsigned target = currentInstruction[2].u.operand;
 
+#if CPU(BIG_ENDIAN)
+    emitLoad(src, regT0, regT1);
+
+    Jump isImmediate = branch32(NotEqual, regT0, Imm32(JSValue::CellTag));
+#else
     emitLoad(src, regT1, regT0);
 
     Jump isImmediate = branch32(NotEqual, regT1, Imm32(JSValue::CellTag));
+#endif
 
     // First, handle JSCell cases - check MasqueradesAsUndefined bit on the structure.
+#if CPU(BIG_ENDIAN)
+    loadPtr(Address(regT1, OBJECT_OFFSETOF(JSCell, m_structure)), regT2);
+#else
     loadPtr(Address(regT0, OBJECT_OFFSETOF(JSCell, m_structure)), regT2);
+#endif
     addJump(branchTest32(Zero, Address(regT2, OBJECT_OFFSETOF(Structure, m_typeInfo.m_flags)), Imm32(MasqueradesAsUndefined)), target);
 
     Jump wasNotImmediate = jump();
@@ -939,11 +1138,19 @@ void JIT::emit_op_jneq_null(Instruction* currentInstruction)
     // Now handle the immediate cases - undefined & null
     isImmediate.link(this);
 
+#if CPU(BIG_ENDIAN)
+    set32(Equal, regT0, Imm32(JSValue::NullTag), regT2);
+    set32(Equal, regT0, Imm32(JSValue::UndefinedTag), regT0);
+    or32(regT2, regT0);
+
+    addJump(branchTest32(Zero, regT0), target);
+#else
     set32(Equal, regT1, Imm32(JSValue::NullTag), regT2);
     set32(Equal, regT1, Imm32(JSValue::UndefinedTag), regT1);
     or32(regT2, regT1);
 
     addJump(branchTest32(Zero, regT1), target);
+#endif
 
     wasNotImmediate.link(this);
 }
@@ -954,9 +1161,15 @@ void JIT::emit_op_jneq_ptr(Instruction* currentInstruction)
     JSCell* ptr = currentInstruction[2].u.jsCell;
     unsigned target = currentInstruction[3].u.operand;
 
+#if CPU(BIG_ENDIAN)
+    emitLoad(src, regT0, regT1);
+    addJump(branch32(NotEqual, regT0, Imm32(JSValue::CellTag)), target);
+    addJump(branchPtr(NotEqual, regT1, ImmPtr(ptr)), target);
+#else
     emitLoad(src, regT1, regT0);
     addJump(branch32(NotEqual, regT1, Imm32(JSValue::CellTag)), target);
     addJump(branchPtr(NotEqual, regT0, ImmPtr(ptr)), target);
+#endif
 }
 
 void JIT::emit_op_jsr(Instruction* currentInstruction)
@@ -979,6 +1192,17 @@ void JIT::emit_op_eq(Instruction* currentInstruction)
     unsigned src1 = currentInstruction[2].u.operand;
     unsigned src2 = currentInstruction[3].u.operand;
     
+#if CPU(BIG_ENDIAN)
+    emitLoad2(src1, regT0, regT1, src2, regT3, regT2);
+    addSlowCase(branch32(NotEqual, regT0, regT3));
+    addSlowCase(branch32(Equal, regT0, Imm32(JSValue::CellTag)));
+    addSlowCase(branch32(Below, regT0, Imm32(JSValue::LowestTag)));
+
+    set8(Equal, regT1, regT2, regT1);
+    or32(Imm32(JSValue::FalseTag), regT1);
+
+    emitStoreBool(dst, regT1);
+#else
     emitLoad2(src1, regT1, regT0, src2, regT3, regT2);
     addSlowCase(branch32(NotEqual, regT1, regT3));
     addSlowCase(branch32(Equal, regT1, Imm32(JSValue::CellTag)));
@@ -988,6 +1212,7 @@ void JIT::emit_op_eq(Instruction* currentInstruction)
     or32(Imm32(JSValue::FalseTag), regT0);
 
     emitStoreBool(dst, regT0);
+#endif
 }
 
 void JIT::emitSlow_op_eq(Instruction* currentInstruction, Vector<SlowCaseEntry>::iterator& iter)
@@ -1002,12 +1227,20 @@ void JIT::emitSlow_op_eq(Instruction* currentInstruction, Vector<SlowCaseEntry>:
     genericCase.append(getSlowCase(iter)); // tags not equal
 
     linkSlowCase(iter); // tags equal and JSCell
+#if CPU(BIG_ENDIAN)
+    genericCase.append(branchPtr(NotEqual, Address(regT1), ImmPtr(m_globalData->jsStringVPtr)));
+#else
     genericCase.append(branchPtr(NotEqual, Address(regT0), ImmPtr(m_globalData->jsStringVPtr)));
+#endif
     genericCase.append(branchPtr(NotEqual, Address(regT2), ImmPtr(m_globalData->jsStringVPtr)));
 
     // String case.
     JITStubCall stubCallEqStrings(this, cti_op_eq_strings);
+#if  CPU(BIG_ENDIAN)
+    stubCallEqStrings.addArgument(regT1);
+#else
     stubCallEqStrings.addArgument(regT0);
+#endif
     stubCallEqStrings.addArgument(regT2);
     stubCallEqStrings.call();
     storeResult.append(jump());
@@ -1018,7 +1251,11 @@ void JIT::emitSlow_op_eq(Instruction* currentInstruction, Vector<SlowCaseEntry>:
     JITStubCall stubCallEq(this, cti_op_eq);
     stubCallEq.addArgument(op1);
     stubCallEq.addArgument(op2);
+#if CPU(BIG_ENDIAN)
+    stubCallEq.call(regT1);
+#else
     stubCallEq.call(regT0);
+#endif
 
     storeResult.link(this);
     or32(Imm32(JSValue::FalseTag), regT0);
@@ -1031,6 +1268,17 @@ void JIT::emit_op_neq(Instruction* currentInstruction)
     unsigned src1 = currentInstruction[2].u.operand;
     unsigned src2 = currentInstruction[3].u.operand;
     
+#if  CPU(BIG_ENDIAN)
+    emitLoad2(src1, regT0, regT1, src2, regT3, regT2);
+    addSlowCase(branch32(NotEqual, regT0, regT3));
+    addSlowCase(branch32(Equal, regT0, Imm32(JSValue::CellTag)));
+    addSlowCase(branch32(Below, regT0, Imm32(JSValue::LowestTag)));
+
+    set8(NotEqual, regT1, regT2, regT1);
+    or32(Imm32(JSValue::FalseTag), regT1);
+
+    emitStoreBool(dst, regT1);
+#else
     emitLoad2(src1, regT1, regT0, src2, regT3, regT2);
     addSlowCase(branch32(NotEqual, regT1, regT3));
     addSlowCase(branch32(Equal, regT1, Imm32(JSValue::CellTag)));
@@ -1040,6 +1288,7 @@ void JIT::emit_op_neq(Instruction* currentInstruction)
     or32(Imm32(JSValue::FalseTag), regT0);
 
     emitStoreBool(dst, regT0);
+#endif
 }
 
 void JIT::emitSlow_op_neq(Instruction* currentInstruction, Vector<SlowCaseEntry>::iterator& iter)
@@ -1052,21 +1301,37 @@ void JIT::emitSlow_op_neq(Instruction* currentInstruction, Vector<SlowCaseEntry>
     genericCase.append(getSlowCase(iter)); // tags not equal
 
     linkSlowCase(iter); // tags equal and JSCell
+#if CPU(BIG_ENDIAN)
+    genericCase.append(branchPtr(NotEqual, Address(regT1), ImmPtr(m_globalData->jsStringVPtr)));
+#else
     genericCase.append(branchPtr(NotEqual, Address(regT0), ImmPtr(m_globalData->jsStringVPtr)));
+#endif
     genericCase.append(branchPtr(NotEqual, Address(regT2), ImmPtr(m_globalData->jsStringVPtr)));
 
     // String case.
     JITStubCall stubCallEqStrings(this, cti_op_eq_strings);
+#if CPU(BIG_ENDIAN)
+    stubCallEqStrings.addArgument(regT1);
+#else
     stubCallEqStrings.addArgument(regT0);
+#endif
     stubCallEqStrings.addArgument(regT2);
+#if CPU(BIG_ENDIAN)
+    stubCallEqStrings.call(regT1);
+#else
     stubCallEqStrings.call(regT0);
+#endif
     storeResult.append(jump());
 
     // Generic case.
     genericCase.append(getSlowCase(iter)); // doubles
     genericCase.link(this);
     JITStubCall stubCallEq(this, cti_op_eq);
+#if CPU(BIG_ENDIAN)
+    stubCallEq.addArgument(regT0, regT1);
+#else
     stubCallEq.addArgument(regT1, regT0);
+#endif
     stubCallEq.addArgument(regT3, regT2);
     stubCallEq.call(regT0);
 
@@ -1147,6 +1412,27 @@ void JIT::emit_op_eq_null(Instruction* currentInstruction)
     unsigned dst = currentInstruction[1].u.operand;
     unsigned src = currentInstruction[2].u.operand;
 
+#if CPU(BIG_ENDIAN)
+    emitLoad(src, regT0, regT1);
+    Jump isImmediate = branch32(NotEqual, regT0, Imm32(JSValue::CellTag));
+
+    loadPtr(Address(regT1, OBJECT_OFFSETOF(JSCell, m_structure)), regT0);
+    setTest8(NonZero, Address(regT0, OBJECT_OFFSETOF(Structure, m_typeInfo.m_flags)), Imm32(MasqueradesAsUndefined), regT0);
+
+    Jump wasNotImmediate = jump();
+
+    isImmediate.link(this);
+
+    set8(Equal, regT0, Imm32(JSValue::NullTag), regT2);
+    set8(Equal, regT0, Imm32(JSValue::UndefinedTag), regT0);
+    or32(regT2, regT0);
+
+    wasNotImmediate.link(this);
+
+    or32(Imm32(JSValue::FalseTag), regT0);
+
+    emitStoreBool(dst, regT0);
+#else
     emitLoad(src, regT1, regT0);
     Jump isImmediate = branch32(NotEqual, regT1, Imm32(JSValue::CellTag));
 
@@ -1166,6 +1452,7 @@ void JIT::emit_op_eq_null(Instruction* currentInstruction)
     or32(Imm32(JSValue::FalseTag), regT1);
 
     emitStoreBool(dst, regT1);
+#endif
 }
 
 void JIT::emit_op_neq_null(Instruction* currentInstruction)
@@ -1173,6 +1460,27 @@ void JIT::emit_op_neq_null(Instruction* currentInstruction)
     unsigned dst = currentInstruction[1].u.operand;
     unsigned src = currentInstruction[2].u.operand;
 
+#if CPU(BIG_ENDIAN)
+    emitLoad(src, regT0, regT1);
+    Jump isImmediate = branch32(NotEqual, regT0, Imm32(JSValue::CellTag));
+
+    loadPtr(Address(regT1, OBJECT_OFFSETOF(JSCell, m_structure)), regT0);
+    setTest8(Zero, Address(regT0, OBJECT_OFFSETOF(Structure, m_typeInfo.m_flags)), Imm32(MasqueradesAsUndefined), regT0);
+
+    Jump wasNotImmediate = jump();
+
+    isImmediate.link(this);
+
+    set8(NotEqual, regT0, Imm32(JSValue::NullTag), regT2);
+    set8(NotEqual, regT0, Imm32(JSValue::UndefinedTag), regT0);
+    and32(regT2, regT0);
+
+    wasNotImmediate.link(this);
+
+    or32(Imm32(JSValue::FalseTag), regT0);
+
+    emitStoreBool(dst, regT0);
+#else
     emitLoad(src, regT1, regT0);
     Jump isImmediate = branch32(NotEqual, regT1, Imm32(JSValue::CellTag));
 
@@ -1192,6 +1500,7 @@ void JIT::emit_op_neq_null(Instruction* currentInstruction)
     or32(Imm32(JSValue::FalseTag), regT1);
 
     emitStoreBool(dst, regT1);
+#endif
 }
 
 void JIT::emit_op_resolve_with_base(Instruction* currentInstruction)
@@ -1240,6 +1549,15 @@ void JIT::emit_op_get_pnames(Instruction* currentInstruction)
 
     JumpList isNotObject;
 
+#if CPU(BIG_ENDIAN)
+    emitLoad(base, regT0, regT1);
+    if (!m_codeBlock->isKnownNotImmediate(base))
+        isNotObject.append(branch32(NotEqual, regT0, Imm32(JSValue::CellTag)));
+    if (base != m_codeBlock->thisRegister()) {
+        loadPtr(Address(regT1, OBJECT_OFFSETOF(JSCell, m_structure)), regT2);
+        isNotObject.append(branch32(NotEqual, Address(regT2, OBJECT_OFFSETOF(Structure, m_typeInfo.m_type)), Imm32(ObjectType)));
+    }
+#else
     emitLoad(base, regT1, regT0);
     if (!m_codeBlock->isKnownNotImmediate(base))
         isNotObject.append(branch32(NotEqual, regT1, Imm32(JSValue::CellTag)));
@@ -1247,12 +1565,17 @@ void JIT::emit_op_get_pnames(Instruction* currentInstruction)
         loadPtr(Address(regT0, OBJECT_OFFSETOF(JSCell, m_structure)), regT2);
         isNotObject.append(branch32(NotEqual, Address(regT2, OBJECT_OFFSETOF(Structure, m_typeInfo.m_type)), Imm32(ObjectType)));
     }
+#endif
 
     // We could inline the case where you have a valid cache, but
     // this call doesn't seem to be hot.
     Label isObject(this);
     JITStubCall getPnamesStubCall(this, cti_op_get_pnames);
+#if CPU(BIG_ENDIAN)
+    getPnamesStubCall.addArgument(regT1);
+#else
     getPnamesStubCall.addArgument(regT0);
+#endif
     getPnamesStubCall.call(dst);
     load32(Address(regT0, OBJECT_OFFSETOF(JSPropertyNameIterator, m_jsStringsSize)), regT3);
     store32(Imm32(0), addressFor(i));
@@ -1260,10 +1583,17 @@ void JIT::emit_op_get_pnames(Instruction* currentInstruction)
     Jump end = jump();
 
     isNotObject.link(this);
+#if CPU(BIG_ENDIAN)
+    addJump(branch32(Equal, regT0, Imm32(JSValue::NullTag)), breakTarget);
+    addJump(branch32(Equal, regT0, Imm32(JSValue::UndefinedTag)), breakTarget);
+    JITStubCall toObjectStubCall(this, cti_to_object);
+    toObjectStubCall.addArgument(regT0, regT1);
+#else
     addJump(branch32(Equal, regT1, Imm32(JSValue::NullTag)), breakTarget);
     addJump(branch32(Equal, regT1, Imm32(JSValue::UndefinedTag)), breakTarget);
     JITStubCall toObjectStubCall(this, cti_to_object);
     toObjectStubCall.addArgument(regT1, regT0);
+#endif
     toObjectStubCall.call(base);
     jump().linkTo(isObject, this);
     
@@ -1286,9 +1616,17 @@ void JIT::emit_op_next_pname(Instruction* currentInstruction)
     Jump end = branch32(Equal, regT0, addressFor(size));
 
     // Grab key @ i
+#if CPU(BIG_ENDIAN)
+    loadPtr(addressForPlus4(it), regT1);
+#else
     loadPtr(addressFor(it), regT1);
+#endif
     loadPtr(Address(regT1, OBJECT_OFFSETOF(JSPropertyNameIterator, m_jsStrings)), regT2);
+#if CPU(BIG_ENDIAN)
+    load32(BaseIndex(regT2, regT0, TimesEight, 4), regT2);
+#else
     load32(BaseIndex(regT2, regT0, TimesEight), regT2);
+#endif
     store32(Imm32(JSValue::CellTag), tagFor(dst));
     store32(regT2, payloadFor(dst));
 
@@ -1297,7 +1635,11 @@ void JIT::emit_op_next_pname(Instruction* currentInstruction)
     store32(regT0, addressFor(i));
 
     // Verify that i is valid:
+#if CPU(BIG_ENDIAN)
+    loadPtr(addressForPlus4(base), regT0);
+#else
     loadPtr(addressFor(base), regT0);
+#endif
 
     // Test base's structure
     loadPtr(Address(regT0, OBJECT_OFFSETOF(JSCell, m_structure)), regT2);
@@ -1321,7 +1663,11 @@ void JIT::emit_op_next_pname(Instruction* currentInstruction)
 
     // Slow case: Ask the object if i is valid.
     callHasProperty.link(this);
+#if CPU(BIG_ENDIAN)
+    loadPtr(addressForPlus4(dst), regT1);
+#else
     loadPtr(addressFor(dst), regT1);
+#endif
     JITStubCall stubCall(this, cti_has_property);
     stubCall.addArgument(regT0);
     stubCall.addArgument(regT1);
@@ -1352,6 +1698,17 @@ void JIT::emit_op_to_jsnumber(Instruction* currentInstruction)
     int dst = currentInstruction[1].u.operand;
     int src = currentInstruction[2].u.operand;
 
+#if CPU(BIG_ENDIAN)
+    emitLoad(src, regT0, regT1);
+
+    Jump isInt32 = branch32(Equal, regT0, Imm32(JSValue::Int32Tag));
+    addSlowCase(branch32(AboveOrEqual, regT0, Imm32(JSValue::EmptyValueTag)));
+    isInt32.link(this);
+
+    if (src != dst)
+        emitStore(dst, regT0, regT1);
+    map(m_bytecodeIndex + OPCODE_LENGTH(op_to_jsnumber), dst, regT0, regT1);
+#else
     emitLoad(src, regT1, regT0);
 
     Jump isInt32 = branch32(Equal, regT1, Imm32(JSValue::Int32Tag));
@@ -1361,6 +1718,7 @@ void JIT::emit_op_to_jsnumber(Instruction* currentInstruction)
     if (src != dst)
         emitStore(dst, regT1, regT0);
     map(m_bytecodeIndex + OPCODE_LENGTH(op_to_jsnumber), dst, regT1, regT0);
+#endif
 }
 
 void JIT::emitSlow_op_to_jsnumber(Instruction* currentInstruction, Vector<SlowCaseEntry>::iterator& iter)
@@ -1370,7 +1728,11 @@ void JIT::emitSlow_op_to_jsnumber(Instruction* currentInstruction, Vector<SlowCa
     linkSlowCase(iter);
 
     JITStubCall stubCall(this, cti_op_to_jsnumber);
+#if CPU(BIG_ENDIAN)
+    stubCall.addArgument(regT0, regT1);
+#else
     stubCall.addArgument(regT1, regT0);
+#endif
     stubCall.call(dst);
 }
 
@@ -1393,8 +1755,13 @@ void JIT::emit_op_catch(Instruction* currentInstruction)
     peek(callFrameRegister, OBJECT_OFFSETOF(struct JITStackFrame, callFrame) / sizeof (void*));
 
     // Now store the exception returned by cti_op_throw.
+#if CPU(BIG_ENDIAN)
+    emitStore(exception, regT0, regT1);
+    map(m_bytecodeIndex + OPCODE_LENGTH(op_catch), exception, regT0, regT1);
+#else
     emitStore(exception, regT1, regT0);
     map(m_bytecodeIndex + OPCODE_LENGTH(op_catch), exception, regT1, regT0);
+#endif
 }
 
 void JIT::emit_op_jmp_scopes(Instruction* currentInstruction)
@@ -1519,6 +1886,16 @@ void JIT::emit_op_convert_this(Instruction* currentInstruction)
 {
     unsigned thisRegister = currentInstruction[1].u.operand;
     
+#if CPU(BIG_ENDIAN)
+    emitLoad(thisRegister, regT0, regT1);
+
+    addSlowCase(branch32(NotEqual, regT0, Imm32(JSValue::CellTag)));
+
+    loadPtr(Address(regT1, OBJECT_OFFSETOF(JSCell, m_structure)), regT2);
+    addSlowCase(branchTest32(NonZero, Address(regT2, OBJECT_OFFSETOF(Structure, m_typeInfo.m_flags)), Imm32(NeedsThisConversion)));
+
+    map(m_bytecodeIndex + OPCODE_LENGTH(op_convert_this), thisRegister, regT0, regT1);
+#else
     emitLoad(thisRegister, regT1, regT0);
 
     addSlowCase(branch32(NotEqual, regT1, Imm32(JSValue::CellTag)));
@@ -1527,6 +1904,7 @@ void JIT::emit_op_convert_this(Instruction* currentInstruction)
     addSlowCase(branchTest32(NonZero, Address(regT2, OBJECT_OFFSETOF(Structure, m_typeInfo.m_flags)), Imm32(NeedsThisConversion)));
 
     map(m_bytecodeIndex + OPCODE_LENGTH(op_convert_this), thisRegister, regT1, regT0);
+#endif
 }
 
 void JIT::emitSlow_op_convert_this(Instruction* currentInstruction, Vector<SlowCaseEntry>::iterator& iter)
@@ -1537,7 +1915,11 @@ void JIT::emitSlow_op_convert_this(Instruction* currentInstruction, Vector<SlowC
     linkSlowCase(iter);
 
     JITStubCall stubCall(this, cti_op_convert_this);
+#if CPU(BIG_ENDIAN)
+    stubCall.addArgument(regT0, regT1);
+#else
     stubCall.addArgument(regT1, regT0);
+#endif
     stubCall.call(thisRegister);
 }
 

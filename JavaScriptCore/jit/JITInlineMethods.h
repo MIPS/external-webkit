@@ -329,6 +329,11 @@ inline JIT::Address JIT::addressFor(unsigned index, RegisterID base)
     return Address(base, (index * sizeof(Register)));
 }
 
+inline JIT::Address JIT::addressForPlus4(unsigned index, RegisterID base)
+{
+    return Address(base, (index * sizeof(Register) + 4));
+}
+
 #if USE(JSVALUE32_64)
 
 inline JIT::Address JIT::tagFor(unsigned index, RegisterID base)
@@ -603,8 +608,13 @@ ALWAYS_INLINE bool JIT::getOperandConstantImmediateInt(unsigned op1, unsigned op
 ALWAYS_INLINE void JIT::emitPutJITStubArg(RegisterID tag, RegisterID payload, unsigned argumentNumber)
 {
     unsigned argumentStackOffset = (argumentNumber * (sizeof(JSValue) / sizeof(void*))) + JITSTACKFRAME_ARGS_INDEX;
+#if CPU(BIG_ENDIAN)
+    poke(payload, argumentStackOffset + 1);
+    poke(tag, argumentStackOffset);
+#else
     poke(payload, argumentStackOffset);
     poke(tag, argumentStackOffset + 1);
+#endif
 }
 
 /* Deprecated: Please use JITStubCall instead. */
@@ -614,12 +624,22 @@ ALWAYS_INLINE void JIT::emitPutJITStubArgFromVirtualRegister(unsigned src, unsig
     unsigned argumentStackOffset = (argumentNumber * (sizeof(JSValue) / sizeof(void*))) + JITSTACKFRAME_ARGS_INDEX;
     if (m_codeBlock->isConstantRegisterIndex(src)) {
         JSValue constant = m_codeBlock->getConstant(src);
+#if CPU(BIG_ENDIAN)
+        poke(Imm32(constant.payload()), argumentStackOffset + 1);
+        poke(Imm32(constant.tag()), argumentStackOffset);
+#else
         poke(Imm32(constant.payload()), argumentStackOffset);
         poke(Imm32(constant.tag()), argumentStackOffset + 1);
+#endif
     } else {
         emitLoad(src, scratch1, scratch2);
+#if CPU(BIG_ENDIAN)
+        poke(scratch2, argumentStackOffset + 1);
+        poke(scratch1, argumentStackOffset);
+#else
         poke(scratch2, argumentStackOffset);
         poke(scratch1, argumentStackOffset + 1);
+#endif
     }
 }
 

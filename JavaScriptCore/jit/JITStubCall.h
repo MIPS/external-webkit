@@ -119,15 +119,25 @@ namespace JSC {
 
         void addArgument(const JSValue& value)
         {
+#if CPU(BIG_ENDIAN)
+            m_jit->poke(JIT::Imm32(value.payload()), m_stackIndex + 1);
+            m_jit->poke(JIT::Imm32(value.tag()), m_stackIndex);
+#else
             m_jit->poke(JIT::Imm32(value.payload()), m_stackIndex);
             m_jit->poke(JIT::Imm32(value.tag()), m_stackIndex + 1);
+#endif
             m_stackIndex += stackIndexStep;
         }
 
         void addArgument(JIT::RegisterID tag, JIT::RegisterID payload)
         {
+#if CPU(BIG_ENDIAN)
+            m_jit->poke(payload, m_stackIndex + 1);
+            m_jit->poke(tag, m_stackIndex);
+#else
             m_jit->poke(payload, m_stackIndex);
             m_jit->poke(tag, m_stackIndex + 1);
+#endif
             m_stackIndex += stackIndexStep;
         }
 
@@ -139,15 +149,25 @@ namespace JSC {
                 return;
             }
 
+#if CPU(BIG_ENDIAN)
+            m_jit->emitLoad(srcVirtualRegister, JIT::regT0, JIT::regT1);
+            addArgument(JIT::regT0, JIT::regT1);
+#else
             m_jit->emitLoad(srcVirtualRegister, JIT::regT1, JIT::regT0);
             addArgument(JIT::regT1, JIT::regT0);
+#endif
         }
 
         void getArgument(size_t argumentNumber, JIT::RegisterID tag, JIT::RegisterID payload)
         {
             size_t stackIndex = JITSTACKFRAME_ARGS_INDEX + (argumentNumber * stackIndexStep);
+#if CPU(BIG_ENDIAN)
+            m_jit->peek(payload, stackIndex + 1);
+            m_jit->peek(tag, stackIndex);
+#else
             m_jit->peek(payload, stackIndex);
             m_jit->peek(tag, stackIndex + 1);
+#endif
         }
 #else
         void addArgument(unsigned src, JIT::RegisterID scratchRegister) // src is a virtual register.
@@ -192,7 +212,11 @@ namespace JSC {
             ASSERT(m_returnType == Value || m_returnType == Cell);
             JIT::Call call = this->call();
             if (m_returnType == Value)
+#if CPU(BIG_ENDIAN)
+                m_jit->emitStore(dst, JIT::regT0, JIT::regT1);
+#else
                 m_jit->emitStore(dst, JIT::regT1, JIT::regT0);
+#endif
             else
                 m_jit->emitStoreCell(dst, JIT::returnValueRegister);
             return call;

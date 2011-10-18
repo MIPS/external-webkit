@@ -409,6 +409,7 @@ namespace JSC {
         void emitLoadInt32ToDouble(unsigned index, FPRegisterID value);
 
         Address addressFor(unsigned index, RegisterID base = callFrameRegister);
+        Address addressForPlus4(unsigned index, RegisterID base = callFrameRegister);
 
         void testPrototype(Structure*, JumpList& failureCases);
 
