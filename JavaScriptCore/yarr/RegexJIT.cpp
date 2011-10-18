@@ -549,6 +549,16 @@ class RegexGenerator : private MacroAssembler {
         UChar ch2 = state.lookaheadTerm().patternCharacter;
 
         int mask = 0;
+#if CPU(BIG_ENDIAN)
+        int chPair = ch2 | (ch1 << 16);
+
+        if (m_pattern.m_ignoreCase) {
+            if (isASCIIAlpha(ch2))
+                mask |= 32;
+            if (isASCIIAlpha(ch1))
+                mask |= 32 << 16;
+        }
+#else
         int chPair = ch1 | (ch2 << 16);
         
         if (m_pattern.m_ignoreCase) {
@@ -557,6 +567,7 @@ class RegexGenerator : private MacroAssembler {
             if (isASCIIAlpha(ch2))
                 mask |= 32 << 16;
         }
+#endif
 
         if (mask) {
             load32WithUnalignedHalfWords(BaseIndex(input, index, TimesTwo, state.inputOffset() * sizeof(UChar)), character);

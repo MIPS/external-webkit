@@ -697,6 +697,19 @@ __asm void ctiOpThrowNotCaught()
 
 #elif CPU(MIPS)
 
+#define PRESERVED_GP_OFFSET         28
+#define PRESERVED_S0_OFFSET         32
+#define PRESERVED_S1_OFFSET         36
+#define PRESERVED_S2_OFFSET         40
+#define PRESERVED_RETURN_ADDRESS_OFFSET 44
+#define THUNK_RETURN_ADDRESS_OFFSET 48
+#define REGISTER_FILE_OFFSET        52
+#define CALLFRAME_OFFSET            56
+#define EXCEPTION_OFFSET            60
+#define ENABLE_PROFILER_REFERENCE_OFFSET 64
+#define GLOBAL_DATA_OFFSET          68
+#define STACK_LENGTH                72
+
 #if USE(JIT_STUB_ARGUMENT_VA_LIST)
 #error "JIT_STUB_ARGUMENT_VA_LIST not supported on MIPS."
 #endif
