@@ -49,8 +49,18 @@ ifeq ($(ARCH_ARM_HAVE_VFP),true)
     DEFAULT_ENGINE = v8
     ALT_ENGINE = jsc
 else
-    DEFAULT_ENGINE = jsc
-    ALT_ENGINE = jsc
+    ifeq ($(TARGET_ARCH),mips)
+        ifneq ($(ARCH_HAS_BIGENDIAN),true)
+            DEFAULT_ENGINE = v8
+            ALT_ENGINE = jsc
+        else
+            DEFAULT_ENGINE = jsc
+            ALT_ENGINE = jsc
+        endif
+    else
+        DEFAULT_ENGINE = jsc
+        ALT_ENGINE = jsc
+    endif
 endif
 
 ifneq ($(JAVASCRIPT_ENGINE),jsc)
