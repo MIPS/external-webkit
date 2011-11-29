@@ -440,8 +440,19 @@ void Settings::resetMetadataSettings()
     m_format_detection_email = true;
 }
 
-void Settings::setMetadataSettings(const String& key, const String& value)
+bool Settings::setMetadataSettings(const String& key, const String& value)
+    // return true if any settings actually changed
 {
+    int  prev_width             = m_viewport_width;
+    int  prev_height            = m_viewport_height;
+    int  prev_initial_scale     = m_viewport_initial_scale;
+    int  prev_minimum_scale     = m_viewport_minimum_scale;
+    int  prev_maximum_scale     = m_viewport_maximum_scale;
+    int  prev_target_densitydbp = m_viewport_target_densitydpi;
+    bool prev_user_scalable     = m_viewport_user_scalable;
+    bool prev_telephone         = m_format_detection_telephone;
+    bool prev_address           = m_format_detection_address;
+    bool prev_email             = m_format_detection_email;
     if (key == "width") {
         if (value == "device-width") {
             m_viewport_width = 0;
@@ -527,6 +538,16 @@ void Settings::setMetadataSettings(const String& key, const String& value)
             m_format_detection_email = false;
         }
     }
+    return prev_width             != m_viewport_width
+        || prev_height            != m_viewport_height
+        || prev_initial_scale     != m_viewport_initial_scale
+        || prev_minimum_scale     != m_viewport_minimum_scale
+        || prev_maximum_scale     != m_viewport_maximum_scale
+        || prev_target_densitydbp != m_viewport_target_densitydpi
+        || prev_user_scalable     != m_viewport_user_scalable
+        || prev_telephone         != m_format_detection_telephone
+        || prev_address           != m_format_detection_address
+        || prev_email             != m_format_detection_email;
 }
 
 void Settings::setViewportWidth(int width)

@@ -705,7 +705,7 @@ public:
      * Handles viewport like <meta name = "viewport" content = "width = device-width">
      * or format-detection like <meta name = "format-detection" content = "telephone=no">
      */
-    void processMetadataSettings(const String& content);
+    bool processMetadataSettings(const String& content);
 #endif
 
     // Returns the owning element in the parent document.

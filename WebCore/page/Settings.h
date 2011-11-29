@@ -234,7 +234,7 @@ namespace WebCore {
 
 #ifdef ANDROID_META_SUPPORT
         void resetMetadataSettings();
-        void setMetadataSettings(const String& key, const String& value);
+        bool setMetadataSettings(const String& key, const String& value);
 
         void setViewportWidth(int);
         int viewportWidth() const { return m_viewport_width; }

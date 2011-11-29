@@ -2280,7 +2280,8 @@ static bool isSeparator(::UChar c)
     return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '=' || c == ',' || c == ';' || c == '\0';
 }
 
-void Document::processMetadataSettings(const String& content)
+bool Document::processMetadataSettings(const String& content)
+    // return true if any settings actually changed
 {
     ASSERT(!content.isNull());
     
@@ -2288,6 +2289,7 @@ void Document::processMetadataSettings(const String& content)
     int i = 0;
     int length = content.length();
     String buffer = content.lower();
+    bool changed = false;
     while (i < length) {
         // skip to first non-separator, but don't skip past the end of the string
         while (isSeparator(buffer[i])) {
@@ -2327,8 +2329,9 @@ void Document::processMetadataSettings(const String& content)
         String key(buffer.substring(keyBegin, keyEnd - keyBegin));
         String value(buffer.substring(valueBegin, valueEnd - valueBegin));
         if (frame())
-            frame()->settings()->setMetadataSettings(key, value);
+            changed |= frame()->settings()->setMetadataSettings(key, value);
     }
+    return changed;
 }
 #endif
 
