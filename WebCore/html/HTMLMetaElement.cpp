@@ -73,8 +73,7 @@ void HTMLMetaElement::process()
         return;
     bool updateViewport = false;
     if (equalIgnoringCase(name(), "viewport")) {
-        document()->processMetadataSettings(m_content);
-        updateViewport = true;
+        updateViewport = document()->processMetadataSettings(m_content);
     } else if (equalIgnoringCase(name(), "format-detection"))
         document()->processMetadataSettings(m_content);
     else if ((equalIgnoringCase(name(), "HandheldFriendly")
